@@ -1,0 +1,9 @@
+/e-CALLISTO_*
+*.pyc
+burstextractor/__pycache__/*
+images/*
+test_data/**/*.fit.gz
+*.log
+.vscode/*
+test_data/**.txt
+added_data_log/urls.parquet
