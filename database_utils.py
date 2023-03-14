@@ -505,20 +505,6 @@ def create_dict_of_instrument_paths(paths):
     return instrument_paths
 
 
-def extract_date_from_path(path):
-    """Extracts the date from a file path.
-    Example: /random_2313/ecallisto/2023/01/27/ALASKA_COHOE_20230127_001500_623.fit.gz -> 2023-01-27 00:15:00
-    """
-    date = path.split("/")[-1].split(".")[0].split("_")
-    if (
-        len(date[-1]) < 6 or int(date[-1][:1]) > 24
-    ):  # Last element is not a timestamp but an ID
-        date.pop()
-    date = date[-2:]
-    date = datetime.strptime("_".join(date), "%Y%m%d_%H%M%S")
-    return date
-
-
 def is_table_in_db(table_name):
     return table_name in get_table_names_sql()
 

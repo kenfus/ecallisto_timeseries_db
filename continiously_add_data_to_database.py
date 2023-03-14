@@ -50,14 +50,16 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count):
         pool.join()
 
 
-def add_and_check_data_of_last_two_weeks(instrument_substring, chunk_size, cpu_count):
+def add_and_check_data_to_database(
+    instrument_substring, chunk_size, cpu_count, days_to_observe
+):
     # Check data for today and yesterday to create the database.
     LOGGER.info("Checking data for today to create the database.")
     today = datetime.today().date()
-    new_urls = get_urls(today - timedelta(days=14), today, instrument_substring)
-    new_urls = pd.DataFrame(
-        {"url": new_urls, "date": [extract_date_from_path(url) for url in new_urls]}
+    new_urls = get_urls(
+        today - timedelta(days=days_to_observe), today, instrument_substring
     )
+    new_urls = pd.DataFrame(new_urls)
     # Create the data_today folder if it does not exist
     if not os.path.exists(URL_FILE.split("/")[0]):
         os.makedirs(URL_FILE.split("/")[0])
@@ -71,10 +73,11 @@ def add_and_check_data_of_last_two_weeks(instrument_substring, chunk_size, cpu_c
     urls_to_add = new_urls[~new_urls["url"].isin(already_added_urls["url"])]
 
     if len(urls_to_add) == 0:
-        LOGGER.info("No new data to add between today and 14 days ago.")
+        LOGGER.info(f"No new data to add between today and {days_to_observe} days ago.")
         return
+
     dict_paths = create_dict_of_instrument_paths(urls_to_add["url"].to_list())
-    LOGGER.info(f"Found {len(dict_paths)} to add in the last two weeks.")
+    LOGGER.info(f"Found {len(dict_paths)} to add in the last {days_to_observe} days.")
     # Add the instruments to the database
     add_instruments_from_paths_to_database(dict_paths)
 
@@ -85,7 +88,7 @@ def add_and_check_data_of_last_two_weeks(instrument_substring, chunk_size, cpu_c
 
     # Save all the added urls of the last two weeks
     df = pd.concat([already_added_urls, urls_to_add])
-    df = df[df.date.dt.date >= today - timedelta(days=14)]
+    df = df[df.date.dt.date >= today - timedelta(days=days_to_observe)]
     df.to_parquet(URL_FILE, index=False)
 
 
@@ -94,6 +97,7 @@ def main(
     instrument_substring: str,
     chunk_size: int,
     cpu_count: int,
+    days_to_observe: int,
 ) -> None:
     """
     Add instrument data to a database.
@@ -130,10 +134,13 @@ def main(
     >>> days_chunk_size = 30
     >>> chunk_size = 100
     >>> cpu_count = 8
-    >>> main(start_date, instrument_substring, days_chunk_size, chunk_size, cpu_count)
+    >>> days_to_observe = 14
+    >>> main(start_date, instrument_substring, days_chunk_size, chunk_size, cpu_count, days_to_observe)
     """
     # Add data for today and yesterday to create the database and add new instruments added today.
-    add_and_check_data_of_last_two_weeks(instrument_substring, chunk_size, cpu_count)
+    add_and_check_data_to_database(
+        instrument_substring, chunk_size, cpu_count, days_to_observe
+    )
     # Create a list of dates to add to the database
     dates_to_add = pd.date_range(
         start_date, datetime.today().date(), freq="D", inclusive="left"
@@ -169,8 +176,8 @@ def main(
                 )
                 add_specs_from_paths_to_database(urls, chunk_size, cpu_count)
             # Check if new data is added
-            add_and_check_data_of_last_two_weeks(
-                instrument_substring, chunk_size, cpu_count
+            add_and_check_data_to_database(
+                instrument_substring, chunk_size, cpu_count, days_to_observe
             )
         except ImportError as e:
             LOGGER.error(f"Error adding data to {table}: {e}")
@@ -195,6 +202,12 @@ if __name__ == "__main__":
         help="Instrument glob pattern. Default is 'None', which means all instruments currently in the database and every newly added instrument \
         (added in the last two days). Accepts also a list of instruments, e.g. 'Australia-ASSA, Arecibo-Observatory, HUMAIN, SWISS-Landschlacht, ALASKA-COHOE' \
         If you pass a List, only those instruments are updated and the ones added in the last two days are added.",
+    )
+    parser.add_argument(
+        "--days_to_observe",
+        type=int,
+        default=14,
+        help="Number of days to observe for new or changing data. Default is 14.",
     )
     parser.add_argument(
         "--chunk_size",
