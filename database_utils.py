@@ -2,10 +2,12 @@ import logging
 import os
 from datetime import datetime
 from glob import glob
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
+from tqdm import tqdm
 
 from database_functions import (
     add_new_column_default_value_sql,
@@ -204,11 +206,31 @@ def reverse_extract_instrument_name(instrument_name, include_number=False):
     return "-".join(parts)
 
 
-def add_spec_from_path_to_database(path, progress=None):
-    """Add spectrogram data from a file to the database.
+def add_spec_from_path_to_database(
+    path: str, progress: Union[None, tqdm] = None
+) -> None:
+    """
+    Add spectrogram data from a file to the database.
 
-    Args:
-        path (str): Path of the file containing the spectrogram data.
+    Parameters
+    ----------
+    path : str
+        Path of the file containing the spectrogram data.
+    progress : Union[None, tqdm], optional
+        A progress bar to update while processing the file. Default is None.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    The function reads a spectrogram data file from the provided path and adds the data to a database.
+    It performs several operations on the data before insertion, including masking, column and frequency axis checks, and column insertion if necessary.
+
+    Examples
+    --------
+    >>> add_spec_from_path_to_database('path/to/file.spec')
     """
     if progress is not None:
         progress.value += 1
@@ -247,7 +269,7 @@ def add_spec_from_path_to_database(path, progress=None):
     data = np.array(spec.data, dtype=np.int16)
     if not np.all(data <= 32767):
         LOGGER.warning(
-            f"Warning: {os.path.basename(path)} has values above 32767. Values will be capped to 32767. If that is not desired, update this error and change the data type to not SMALLINT."
+            f"Warning: {os.path.basename(path)} has values above 32767. Values will be capped to 32767. If that is not desired, update this error and change the data type in the database to not SMALLINT."
         )
         data = np.clip(data, a_min=0, a_max=32767)
     date_range = spec_time_to_pd_datetime(spec)
