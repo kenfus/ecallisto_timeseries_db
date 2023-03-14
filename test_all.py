@@ -2,13 +2,17 @@ import datetime
 import os
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from data_creation import download_ecallisto_files
+from data_creation import (
+    check_difference_between_two_reports,
+    download_ecallisto_files,
+    extract_date_from_path,
+)
 from database_utils import (
     combine_non_unique_frequency_axis_mean,
     create_dict_of_instrument_paths,
-    extract_date_from_path,
     extract_instrument_name,
     extract_separate_instruments,
     glob_files,
@@ -216,3 +220,90 @@ def test_combine_non_unique_frequency_axis_mean():
 
     assert np.array_equal(result, expected_result)
     assert np.array_equal(unique_idxs, expected_unique_idxs)
+
+
+def test_check_difference_between_two_reports_same_reports():
+    current_status = pd.DataFrame(
+        {
+            "file_name": ["file1.txt", "file2.txt", "file3.txt"],
+            "url": [
+                "http://example.com/file1.txt",
+                "http://example.com/file2.txt",
+                "http://example.com/file3.txt",
+            ],
+            "date_changed": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "date": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "size": [10, 20, 30],
+        }
+    )
+    previous_status = current_status.copy()
+
+    result = check_difference_between_two_reports(current_status, previous_status)
+
+    assert result.empty
+
+
+def test_check_difference_between_two_reports_different_reports():
+    current_status = pd.DataFrame(
+        {
+            "file_name": ["file1.txt", "file2.txt", "file3.txt"],
+            "url": [
+                "http://example.com/file1.txt",
+                "http://example.com/file2.txt",
+                "http://example.com/file3.txt",
+            ],
+            "date_changed": ["2022-01-02", "2022-01-01", "2022-01-01"],
+            "date": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "size": [12, 20, 30],
+        }
+    )
+    previous_status = pd.DataFrame(
+        {
+            "file_name": ["file1.txt", "file2.txt", "file3.txt"],
+            "url": [
+                "http://example.com/file1.txt",
+                "http://example.com/file2.txt",
+                "http://example.com/file3.txt",
+            ],
+            "date_changed": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "date": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "size": [10, 20, 30],
+        }
+    )
+
+    result = check_difference_between_two_reports(current_status, previous_status)
+
+    expected_result = pd.DataFrame(
+        {
+            "file_name": ["file1.txt"],
+            "url": ["http://example.com/file1.txt"],
+            "date_changed": ["2022-01-02"],
+            "date": ["2022-01-01"],
+            "size": [12],
+        }
+    )
+
+    pd.testing.assert_frame_equal(result, expected_result)
+
+
+def test_check_difference_between_two_reports_one_report_empty():
+    current_status = pd.DataFrame(
+        {
+            "file_name": ["file1.txt", "file2.txt", "file3.txt"],
+            "url": [
+                "http://example.com/file1.txt",
+                "http://example.com/file2.txt",
+                "http://example.com/file3.txt",
+            ],
+            "date_changed": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "date": ["2022-01-01", "2022-01-01", "2022-01-01"],
+            "size": [10, 20, 30],
+        }
+    )
+
+    previous_status = pd.DataFrame(
+        {"file_name": [], "url": [], "date_changed": [], "date": [], "size": []}
+    )
+    result = check_difference_between_two_reports(current_status, previous_status)
+
+    assert result.equals(current_status)

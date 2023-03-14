@@ -14,6 +14,7 @@ from database_functions import (
     add_new_column_sql,
     create_table_datetime_primary_key_sql,
     create_table_sql,
+    drop_values_between_two_dates_sql,
     get_column_names_sql,
     get_distinct_dates_from_table_sql,
     get_min_max_datetime_from_table_sql,
@@ -207,7 +208,7 @@ def reverse_extract_instrument_name(instrument_name, include_number=False):
 
 
 def add_spec_from_path_to_database(
-    path: str, progress: Union[None, tqdm] = None
+    path: str, progress: Union[None, tqdm] = None, replace: bool = False
 ) -> None:
     """
     Add spectrogram data from a file to the database.
@@ -218,6 +219,8 @@ def add_spec_from_path_to_database(
         Path of the file containing the spectrogram data.
     progress : Union[None, tqdm], optional
         A progress bar to update while processing the file. Default is None.
+    replace : bool, optional
+        Whether to replace the data in the database if it already exists. Default is False.
 
     Returns
     -------
@@ -274,6 +277,12 @@ def add_spec_from_path_to_database(
         data = np.clip(data, a_min=0, a_max=32767)
     date_range = spec_time_to_pd_datetime(spec)
     sql_values = np_array_to_postgresql_array_with_datetime_index(date_range, data)
+    if replace:
+        drop_values_between_two_dates_sql(
+            instrument,
+            date_range[0].strftime("%Y-%m-%d %H:%M:%S.%f"),
+            date_range[-1].strftime("%Y-%m-%d %H:%M:%S.%f"),
+        )
     insert_values_sql(instrument, sql_columns, sql_values)
 
 

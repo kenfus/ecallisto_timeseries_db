@@ -257,7 +257,8 @@ def download_ecallisto_files(
     LOGGER.info(
         f"Downloading files from {start_date} to {end_date} (instrument: {instrument if instrument else 'all'})"
     )
-    urls = get_urls(start_date, end_date, instrument)
+    content = get_urls(start_date, end_date, instrument)
+    urls = content["url"]
     # Create a partial function to pass the dir argument and return_download_path
     fn = partial(
         download_ecallisto_file, return_download_path=return_download_paths, dir=dir
@@ -268,6 +269,36 @@ def download_ecallisto_files(
 
     if return_download_paths:
         return r
+
+
+def check_difference_between_two_reports(current_status, previous_status):
+    """
+    Check the difference between two reports and return the difference.
+    Parameters
+    ----------
+    current_status : pd.DataFrame
+        pd.DataFrame containing the current status of the database.
+    previous_status : pd.DataFrame
+        pd.DataFrame containing the previous status of the database.
+
+    Returns
+    -------
+    pd.DataFrame
+        pd.DataFrame containing the changed files
+    """
+
+    # Get the difference between the two reports
+    diff = current_status.merge(
+        previous_status,
+        how="outer",
+        indicator=True,
+        on=["file_name", "url", "date_changed", "date", "size"],
+        suffixes=("", "_prev"),
+    )
+    # Keep only the rows which are only in the current status.
+    diff = diff[diff["_merge"] == "left_only"]
+    diff = diff.drop(columns=["_merge"])
+    return diff
 
 
 if __name__ == "__main__":

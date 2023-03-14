@@ -2,6 +2,7 @@ import argparse
 import multiprocessing as mp
 import os
 from datetime import datetime, timedelta
+from functools import partial
 from multiprocessing.pool import Pool as Pool
 
 from tqdm import tqdm
@@ -37,10 +38,11 @@ def add_instruments_from_paths_to_database(dict_paths):
                     break
 
 
-def add_specs_from_paths_to_database(urls, chunk_size, cpu_count):
+def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
+    partial_f = partial(add_spec_from_path_to_database, replace=replace)
     with mp.Pool(cpu_count) as pool:
         pool.map_async(
-            add_spec_from_path_to_database,
+            partial_f,
             tqdm(urls, total=len(urls)),
             chunksize=chunk_size,
         )
@@ -50,45 +52,72 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count):
         pool.join()
 
 
+def check_difference_between_two_reports(current_status, previous_status):
+    """
+    Check the difference between two reports and return the difference.
+    Parameters
+    ----------
+    current_status : pd.DataFrame
+        pd.DataFrame containing the current status of the database.
+    previous_status : pd.DataFrame
+        pd.DataFrame containing the previous status of the database.
+
+    Returns
+    -------
+    pd.DataFrame
+        pd.DataFrame containing the changed files
+    """
+
+    # Get the difference between the two reports
+    diff = current_status.merge(
+        previous_status, how="outer", indicator=True, on=["url", "date"]
+    )
+    diff = diff[diff["_merge"] != "both"]
+    diff = diff.drop(columns=["_merge"])
+    return diff
+
+
 def add_and_check_data_to_database(
     instrument_substring, chunk_size, cpu_count, days_to_observe
 ):
     # Check data for today and yesterday to create the database.
     LOGGER.info("Checking data for today to create the database.")
     today = datetime.today().date()
-    new_urls = get_urls(
+    current_status = get_urls(
         today - timedelta(days=days_to_observe), today, instrument_substring
     )
-    new_urls = pd.DataFrame(new_urls)
+    current_status = pd.DataFrame(current_status)
     # Create the data_today folder if it does not exist
     if not os.path.exists(URL_FILE.split("/")[0]):
         os.makedirs(URL_FILE.split("/")[0])
     # Check if the file exists
     if os.path.exists(URL_FILE):
-        already_added_urls = pd.read_parquet(URL_FILE)
+        previous_status = pd.read_parquet(URL_FILE)
+        previous_status = previous_status[
+            previous_status["date"].dt.date >= today - timedelta(days=days_to_observe)
+        ]
         # Get diff between the new urls and the old ones
     else:
-        already_added_urls = pd.DataFrame(columns=["url", "date"])
+        previous_status = pd.DataFrame(columns=current_status.columns)
     # Get the urls that are not in the already_added_urls
-    urls_to_add = new_urls[~new_urls["url"].isin(already_added_urls["url"])]
+    to_add = check_difference_between_two_reports(current_status, previous_status)
 
-    if len(urls_to_add) == 0:
+    if len(to_add) == 0:
         LOGGER.info(f"No new data to add between today and {days_to_observe} days ago.")
         return
 
-    dict_paths = create_dict_of_instrument_paths(urls_to_add["url"].to_list())
+    dict_paths = create_dict_of_instrument_paths(to_add["url"].to_list())
     LOGGER.info(f"Found {len(dict_paths)} to add in the last {days_to_observe} days.")
     # Add the instruments to the database
     add_instruments_from_paths_to_database(dict_paths)
 
     # Add the data to the database
     add_specs_from_paths_to_database(
-        urls_to_add["url"].to_list(), chunk_size, cpu_count
+        to_add["url"].to_list(), chunk_size, cpu_count, replace=True
     )
 
-    # Save all the added urls of the last two weeks
-    df = pd.concat([already_added_urls, urls_to_add])
-    df = df[df.date.dt.date >= today - timedelta(days=days_to_observe)]
+    # Save all the added urls
+    df = pd.concat([current_status, to_add])
     df.to_parquet(URL_FILE, index=False)
 
 
