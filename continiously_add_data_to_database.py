@@ -215,7 +215,6 @@ def main(
 if __name__ == "__main__":
     ## Example:
     # python continiously_add_data_to_database.py --start_date 2023-03-01
-    # --instrument_substring "Australia-ASSA, Arecibo-Observatory, HUMAIN, SWISS-Landschlacht, ALASKA-COHOE"
     # The parameter for the multiprocessing is optimized via cprofiler.
     # Get arguments from command line
     parser = argparse.ArgumentParser()

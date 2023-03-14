@@ -1,4 +1,8 @@
-import cv2
+try:
+    import cv2
+except ImportError:
+    print("OpenCV is not installed correctly. Please install it to use this module.")
+    cv2=None
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -39,12 +43,13 @@ def spec_to_pd_dataframe(spec, kwargs=None):
 
 
 def change_resolution_over_freq(
-    spectogram, freq_resolution, interpolation=cv2.INTER_LINEAR
+    spectogram, freq_resolution, interpolation
 ):
     """
     Change the resolution of the spectogram over frequency (y-axis)
     :param spectogram: The spectogram to change the resolution of.
     :param resolution: The new resolution.
+    :param interpolation: The interpolation method to use. Example: cv2.INTER_LINEAR
     :return: The spectogram with the new resolution.
     """
     index = spectogram.index
@@ -72,12 +77,13 @@ def change_resolution_over_freq(
 
 
 def change_resolution_over_time(
-    spectogram, time_resolution, interpolation=cv2.INTER_LINEAR
+    spectogram, time_resolution, interpolation
 ):
     """
     Change the resolution of the spectogram over time (x-axis)
     :param spectogram: The spectogram to change the resolution of.
     :param resolution: The new resolution.
+    :param interpolation: The interpolation method to use. Example: cv2.INTER_LINEAR
     :return: The spectogram with the new resolution.
     """
     index = spectogram.index

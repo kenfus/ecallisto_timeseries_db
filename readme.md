@@ -34,6 +34,7 @@ sudo systemctl restart postgresql
 
 ## Start Database
 # Create user ecallisto and switch to it with "useradd -m ecallisto"
+# conda env config vars set PGUSER=ecallisto
 # conda env config vars set PGPASSWORD=<> (maybe not secure, check.)
 # change to this user with sudo -u ecallisto -s
 # Clone the repo and cd into it

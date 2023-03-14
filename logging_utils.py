@@ -16,14 +16,15 @@ def __create_log_path(log_name):
     str
         The path to the log file.
     """
+
+    # Path in the working directoy:
     path = os.path.join(
-        os.path.abspath(os.sep),
-        "var",
-        "log",
-        "ecallisto",
+        os.path.abspath(os.path.dirname(__file__)),
+        "logs",
         datetime.now().strftime("%Y-%m-%d"),
         f"{log_name}_{datetime.now().strftime('%H-%M-%S')}.log",
     )
+     
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 

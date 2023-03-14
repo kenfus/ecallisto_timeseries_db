@@ -5,13 +5,18 @@ import psycopg2
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
-os.environ["PGUSER"] = "postgres"
+# If no user is set, set it to postgres because that is the default user and it's hopefully not production
+if "PGUSER" not in os.environ:
+    os.environ["PGUSER"] = "postgres"
 # If no password is set, set it to 1234 because that is the default password and it's hopefully not production
 if "PGPASSWORD" not in os.environ:
     os.environ["PGPASSWORD"] = "1234"
+# If no database is set, set it to tsdb because that is the default database and it's hopefully not production
+if "PGDATABASE" not in os.environ:
+    os.environ["PGDATABASE"] = "tsdb"
 
 ##
-CONNECTION = f' dbname=tsdb user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
+CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
 
 
 def create_table_sql(table_name, columns):
