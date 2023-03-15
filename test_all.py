@@ -270,6 +270,8 @@ def test_check_difference_between_two_reports_different_reports():
             "size": [10, 20, 30],
         }
     )
+    previous_status.to_parquet("test.parquet")
+    previous_status = pd.read_parquet("test.parquet")
 
     result = check_difference_between_two_reports(current_status, previous_status)
 

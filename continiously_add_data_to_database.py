@@ -8,7 +8,7 @@ from multiprocessing.pool import Pool as Pool
 from tqdm import tqdm
 
 import logging_utils
-from data_creation import get_urls
+from data_creation import check_difference_between_two_reports, get_urls
 from database_functions import *
 from database_utils import *
 
@@ -50,31 +50,6 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
         # Wait for all tasks to complete
         pool.close()
         pool.join()
-
-
-def check_difference_between_two_reports(current_status, previous_status):
-    """
-    Check the difference between two reports and return the difference.
-    Parameters
-    ----------
-    current_status : pd.DataFrame
-        pd.DataFrame containing the current status of the database.
-    previous_status : pd.DataFrame
-        pd.DataFrame containing the previous status of the database.
-
-    Returns
-    -------
-    pd.DataFrame
-        pd.DataFrame containing the changed files
-    """
-
-    # Get the difference between the two reports
-    diff = current_status.merge(
-        previous_status, how="outer", indicator=True, on=["url", "date"]
-    )
-    diff = diff[diff["_merge"] != "both"]
-    diff = diff.drop(columns=["_merge"])
-    return diff
 
 
 def add_and_check_data_to_database(
