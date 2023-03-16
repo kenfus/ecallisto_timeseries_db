@@ -178,7 +178,7 @@ def main(
                     date,
                     glob_pattern,
                 )
-                add_specs_from_paths_to_database(status["url"].to_list(), chunk_size, cpu_count)
+                add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
             # Check if new data is added
             add_and_check_data_to_database(
                 instrument_substring, chunk_size, cpu_count, days_to_observe
