@@ -67,7 +67,7 @@ def extract_date_size_from_soup(soup, url):
 
 def extract_content(
     url,
-    substrings_to_include,
+    instrument_glob_pattern,
     substring_must_match="fit.gz",
     return_date_size=True,
 ):
@@ -91,9 +91,9 @@ def extract_content(
     Example:
     # Extract all files that include "example" in the file name and that end with ".gz" from the given URL
     url = "https://example.com/files"
-    substrings_to_include = ["example"]
+    instrument_glob_pattern = ["example"]
     substring_must_match = ".gz"
-    content = extract_content(url, substrings_to_include, substring_must_match)
+    content = extract_content(url, instrument_glob_pattern, substring_must_match)
     print(content)
     # Output: {'file_name': ['example1.gz', 'example2.gz'], 'date': ['2022-01-01', '2022-02-01'], 'size': ['1000', '2000'], 'date_changed': ['2022-01-01', '2022-02-01']}
     """
@@ -104,18 +104,12 @@ def extract_content(
     soup = fetch_content(url)
     content = {"file_name": [], "date": [], "size": [], "date_changed": []}
     # If the substrings_to_include is not a list, make it a list if it is not None
-    if not substrings_to_include is None and not isinstance(
-        substrings_to_include, list
-    ):
-        substrings_to_include = [substrings_to_include]
     if substring_must_match is None:
         substring_must_match = ".fit.gz"
 
     for link in soup.find_all("a"):
         if substring_must_match in link.get("href"):
-            if substrings_to_include is None or any(
-                [x.lower() in link.get("href").lower() for x in substrings_to_include]
-            ):
+            if instrument_glob_pattern is None or 
                 content["file_name"].append(link.get("href"))
                 if return_date_size:
                     date_changed, size = extract_date_size_from_soup(
@@ -134,7 +128,7 @@ def extract_content(
 
 
 def extract_fiz_gz_files_urls(
-    year, month, day, instrument_substring, return_date_size=True
+    year, month, day, instrument_glob_pattern, return_date_size=True
 ):
     """
     Extracts all the .fit.gz files from the given year, month and day
@@ -145,7 +139,7 @@ def extract_fiz_gz_files_urls(
     url = f"{FILES_BASE_URL}{year}/{month}/{day}/"
     content = extract_content(
         url,
-        substrings_to_include=instrument_substring,
+        instrument_glob_pattern=instrument_glob_pattern,
         return_date_size=return_date_size,
     )
     # Add the base url to the file names
@@ -178,9 +172,9 @@ def download_ecallisto_file(URL, return_download_path=False, dir=LOCAL_DATA_FOLD
         return file_path
 
 
-def get_urls(start_date, end_date, instrument_substring) -> list[str]:
+def get_urls(start_date, end_date, instrument_glob_pattern) -> list[str]:
     """
-    Get the urls of fiz gz files for a given date range and instrument_substring.
+    Get the urls of fiz gz files for a given date range and instrument_glob_pattern.
 
     Parameters
     ----------
@@ -188,8 +182,8 @@ def get_urls(start_date, end_date, instrument_substring) -> list[str]:
         The start date.
     end_date : pd.Datetime
         The end date.
-    instrument_substring : None or list of str
-        The instrument_substring name. If None, all instruments are considered. Also, the capitalization is ignored.
+    instrument_glob_pattern : None or list of str
+        The instrument_glob_pattern name. If None, all instruments are considered. Also, the capitalization is ignored.
 
     Returns
     -------
@@ -203,7 +197,7 @@ def get_urls(start_date, end_date, instrument_substring) -> list[str]:
             date.year,
             str(date.month).zfill(2),
             str(date.day).zfill(2),
-            instrument_substring=instrument_substring,
+            instrument_glob_pattern=instrument_glob_pattern,
         )
         LOGGER.debug(f"extracted {len(content_)} files for {date}")
         for key in content:
