@@ -99,7 +99,7 @@ def extract_content(
     """
 
     LOGGER.info(
-        f"Extracting files with the following substrings: {substring_must_match}"
+        f"Extracting files with the following must-match substrings: {substring_must_match}"
     )
     soup = fetch_content(url)
     content = {"file_name": [], "date": [], "size": [], "date_changed": []}
@@ -119,7 +119,7 @@ def extract_content(
                     content["date_changed"].append(date_changed)
                     content["size"].append(size)
     LOGGER.info(
-        f"Extracted {len(content)} files with the following substrings: {instrument_regexr_pattern} and the following substring must match: {substring_must_match}"
+        f"Extracted {len(content)} files with the following regexr pattern: {instrument_regexr_pattern} and the following substring must match: {substring_must_match}"
     )
     if len(content) > 0:
         LOGGER.info(f"Example of extracted files: {content['file_name'][:2]}")
