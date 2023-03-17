@@ -9,6 +9,7 @@ from data_creation import (
     check_difference_between_two_reports,
     download_ecallisto_files,
     extract_date_from_path,
+    instrument_name_to_regex_pattern,
 )
 from database_utils import (
     combine_non_unique_frequency_axis_mean,
@@ -114,6 +115,33 @@ def test_sql_column_creation(names, types, expected):
     assert numbers_list_to_postgresql_columns_meta_data(names, types) == expected
 
 
+@pytest.mark.parametrize(
+    "test_input,expected",
+    [
+        (
+            "ALASKA-COHOE",
+            "(ALASKA\-COHOE_\d{8}_\d{6}.+)",
+        ),
+        (
+            "ALASKA-COHOE_62",
+            "(ALASKA\-COHOE_\d{8}_\d{6}_62.+)",
+        ),
+        (
+            "ALASKA_COHOE",
+            "(ALASKA\_COHOE_\d{8}_\d{6}.+)",
+        ),
+        (
+            "ALASKA_COHOE_62",
+            "(ALASKA\_COHOE_\d{8}_\d{6}_62.+)",
+        ),
+        ("FHN-W_11", "(FHN\-W_\d{8}_\d{6}_11.+)"),
+        (None, "([A-Za-z0-9\-]+_\d{8}_\d{6}.+)"),
+    ],
+)
+def test_regex_pattern_extraction(test_input, expected):
+    assert instrument_name_to_regex_pattern(test_input) == expected
+
+
 class TestDataCreation:
     def setup(self):
         self.date = datetime.datetime(2021, 1, 1)
@@ -123,7 +151,7 @@ class TestDataCreation:
         download_ecallisto_files(
             start_date=self.date,
             end_date=self.date,
-            instrument=instruments,
+            instruments=instruments,
             dir=dir,
         )
         assert len(os.listdir(dir)) > 0

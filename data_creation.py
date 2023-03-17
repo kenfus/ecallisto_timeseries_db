@@ -2,12 +2,12 @@
 import datetime
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
 from typing import Union
 
-import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -67,7 +67,7 @@ def extract_date_size_from_soup(soup, url):
 
 def extract_content(
     url,
-    instrument_glob_pattern,
+    instrument_regexr_pattern,
     substring_must_match="fit.gz",
     return_date_size=True,
 ):
@@ -91,9 +91,9 @@ def extract_content(
     Example:
     # Extract all files that include "example" in the file name and that end with ".gz" from the given URL
     url = "https://example.com/files"
-    instrument_glob_pattern = ["example"]
+    instrument_regexr_pattern = "example"
     substring_must_match = ".gz"
-    content = extract_content(url, instrument_glob_pattern, substring_must_match)
+    content = extract_content(url, instrument_regexr_pattern, substring_must_match)
     print(content)
     # Output: {'file_name': ['example1.gz', 'example2.gz'], 'date': ['2022-01-01', '2022-02-01'], 'size': ['1000', '2000'], 'date_changed': ['2022-01-01', '2022-02-01']}
     """
@@ -109,7 +109,12 @@ def extract_content(
 
     for link in soup.find_all("a"):
         if substring_must_match in link.get("href"):
-            if instrument_glob_pattern is None or 
+            regex_to_match = re.compile(instrument_regexr_pattern)
+            if "ALASKA" in link.get("href"):
+                print(re.search(regex_to_match, link.get("href")))
+                print(link.get("href"))
+                print(regex_to_match)
+            if re.search(regex_to_match, link.get("href")):
                 content["file_name"].append(link.get("href"))
                 if return_date_size:
                     date_changed, size = extract_date_size_from_soup(
@@ -118,7 +123,7 @@ def extract_content(
                     content["date_changed"].append(date_changed)
                     content["size"].append(size)
     LOGGER.info(
-        f"Extracted {len(content)} files with the following substrings: {substrings_to_include} and the following substring must match: {substring_must_match}"
+        f"Extracted {len(content)} files with the following substrings: {instrument_regexr_pattern} and the following substring must match: {substring_must_match}"
     )
     if len(content) > 0:
         LOGGER.info(f"Example of extracted files: {content['file_name'][:2]}")
@@ -128,7 +133,7 @@ def extract_content(
 
 
 def extract_fiz_gz_files_urls(
-    year, month, day, instrument_glob_pattern, return_date_size=True
+    year, month, day, instrument_regexr_pattern, return_date_size=True
 ):
     """
     Extracts all the .fit.gz files from the given year, month and day
@@ -139,7 +144,7 @@ def extract_fiz_gz_files_urls(
     url = f"{FILES_BASE_URL}{year}/{month}/{day}/"
     content = extract_content(
         url,
-        instrument_glob_pattern=instrument_glob_pattern,
+        instrument_regexr_pattern=instrument_regexr_pattern,
         return_date_size=return_date_size,
     )
     # Add the base url to the file names
@@ -172,7 +177,7 @@ def download_ecallisto_file(URL, return_download_path=False, dir=LOCAL_DATA_FOLD
         return file_path
 
 
-def get_urls(start_date, end_date, instrument_glob_pattern) -> list[str]:
+def get_urls(start_date, end_date, instrument_regexr_pattern) -> list[str]:
     """
     Get the urls of fiz gz files for a given date range and instrument_glob_pattern.
 
@@ -182,8 +187,8 @@ def get_urls(start_date, end_date, instrument_glob_pattern) -> list[str]:
         The start date.
     end_date : pd.Datetime
         The end date.
-    instrument_glob_pattern : None or list of str
-        The instrument_glob_pattern name. If None, all instruments are considered. Also, the capitalization is ignored.
+    instrument_regexr_pattern : None or list of str
+        The instrument_regexr_pattern name. If None, all instruments are considered. Also, the capitalization is ignored.
 
     Returns
     -------
@@ -197,7 +202,7 @@ def get_urls(start_date, end_date, instrument_glob_pattern) -> list[str]:
             date.year,
             str(date.month).zfill(2),
             str(date.day).zfill(2),
-            instrument_glob_pattern=instrument_glob_pattern,
+            instrument_regexr_pattern=instrument_regexr_pattern,
         )
         LOGGER.debug(f"extracted {len(content_)} files for {date}")
         for key in content:
@@ -206,11 +211,49 @@ def get_urls(start_date, end_date, instrument_glob_pattern) -> list[str]:
     return content
 
 
+def instrument_name_to_regex_pattern(instrument_name):
+    """
+    Convert an instrument name to a regex pattern.
+
+    Parameters
+    ----------
+    instrument_name : str
+        The instrument name.
+
+    Returns
+    -------
+    str
+        The regex pattern.
+
+    Examples
+    --------
+    >>> instrument_name_to_regex_pattern("ALASKA-COHOE-62")
+    '([ALASKA\-COHOE]+_\d{8}_\d{6}_62.+)'
+    >>> instrument_name_to_regex_pattern("ALASKA-COHOE")
+    '([ALASKA\-COHOE]+_\d{8}_\d{6}.+)'
+    >>> instrument_name_to_regex_pattern("ALASKA")
+    '([ALASKA]+_\d{8}_\d{6}.+)'
+    >>> instrument_name_to_regex_pattern(None)
+    '([A-Za-z0-9\-]+_\d{8}_\d{6}.+)'
+    """
+    if instrument_name is None:
+        return "([A-Za-z0-9\-]+_\d{8}_\d{6}.+)"
+    pattern = "_\d{8}_\d{6}"  # date and time
+    if instrument_name[-2:].isdigit():
+        pattern = pattern + "_" + instrument_name[-2:] + ".+"  # instrument number
+        name = instrument_name[:-3]
+    else:
+        pattern = pattern + ".+"
+        name = instrument_name
+    pattern = "(" + name.replace("-", "\-").replace("_", "\_") + pattern + ")"
+    return pattern
+
+
 def download_ecallisto_files(
     dir,
     start_date=datetime.today().date() - timedelta(days=1),
     end_date=datetime.today().date(),
-    instrument: Union[list, None] = None,
+    instruments: Union[list, None] = None,
     return_download_paths=False,
 ):
     """
@@ -224,8 +267,8 @@ def download_ecallisto_files(
         Start date of the download. Default is the date of yesterday.
     end_date : datetime, optional
         End date of the download. Default is the date of today.
-    instrument : list, optional
-        If specified, only files containing any of the given instruments (substring) will be downloaded. Default is None (all instruments).
+    instruments : list, optional
+        If specified, only files containing any of the given instruments (regexr pattern) will be downloaded. Default is None (all instruments).
     return_download_paths : bool, optional
         If True, the paths of the downloaded files will be returned. Default is False.
 
@@ -246,13 +289,19 @@ def download_ecallisto_files(
     assert (
         start_date <= end_date
     ), "Start date should be less than end date and both should be datetime objects"
-    if isinstance(instrument, str) and instrument.lower() in ["*", "all"]:
-        instrument = None
+    if isinstance(instruments, str) and instruments.lower() in ["*", "all"]:
+        instruments = None
     LOGGER.info(
-        f"Downloading files from {start_date} to {end_date} (instrument: {instrument if instrument else 'all'})"
+        f"Downloading files from {start_date} to {end_date} (instrument: {instruments if instruments else 'all'})"
     )
-    content = get_urls(start_date, end_date, instrument)
-    urls = content["url"]
+    if isinstance(instruments, str):
+        instruments = [instruments]
+    urls = []
+    for instrument in instruments:
+        instrument_regexr_pattern = instrument_name_to_regex_pattern(instrument)
+        content = get_urls(start_date, end_date, instrument_regexr_pattern)
+        url = content["url"]
+        urls.extend(url)
     # Create a partial function to pass the dir argument and return_download_path
     fn = partial(
         download_ecallisto_file, return_download_path=return_download_paths, dir=dir
