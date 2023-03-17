@@ -110,10 +110,6 @@ def extract_content(
     for link in soup.find_all("a"):
         if substring_must_match in link.get("href"):
             regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE)
-            if "ALASKA" in link.get("href"):
-                print(re.search(regex_to_match, link.get("href")))
-                print(link.get("href"))
-                print(regex_to_match)
             if re.search(regex_to_match, link.get("href")):
                 content["file_name"].append(link.get("href"))
                 if return_date_size:
@@ -195,7 +191,8 @@ def get_urls(start_date, end_date, instrument_regexr_pattern) -> list[str]:
     list of str
         The list of urls of fiz gz files.
     """
-
+    if instrument_regexr_pattern is None:
+        instrument_regexr_pattern = ".*"
     content = {"file_name": [], "url": [], "date": [], "size": [], "date_changed": []}
     for date in tqdm(pd.date_range(start_date, end_date), desc="fetching urls"):
         content_ = extract_fiz_gz_files_urls(
