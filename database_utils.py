@@ -193,8 +193,8 @@ def reverse_extract_instrument_name(instrument_name, include_number=False):
     -------
     >>> reverse_extract_instrument_name('alaska_cohoe_612')
     'ALASKA-COHOE'
-    >>> reverse_extract_instrument_name('alaska_cohoe_612', include_number=False)
-    'ALASKA-COHOE'
+    >>> reverse_extract_instrument_name('alaska_cohoe_612', include_number=True)
+    'ALASKA-COHOE_612'
 
     """
     # Replace underscores with hyphens and upper all the letters

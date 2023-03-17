@@ -164,7 +164,7 @@ def main(
             )
 
             # Get name of the fits file
-            glob_pattern = [reverse_extract_instrument_name(table).lower()]
+            instrument_name = [reverse_extract_instrument_name(table).lower()]
 
             # Add the data to the database
             for date in tqdm(
@@ -176,7 +176,7 @@ def main(
                 status = get_urls(
                     date,
                     date,
-                    glob_pattern,
+                    instrument_name,
                 )
                 add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
             # Check if new data is added

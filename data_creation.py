@@ -109,7 +109,7 @@ def extract_content(
 
     for link in soup.find_all("a"):
         if substring_must_match in link.get("href"):
-            regex_to_match = re.compile(instrument_regexr_pattern)
+            regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE)
             if "ALASKA" in link.get("href"):
                 print(re.search(regex_to_match, link.get("href")))
                 print(link.get("href"))
