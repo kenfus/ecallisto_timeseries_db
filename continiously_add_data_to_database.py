@@ -99,7 +99,7 @@ def add_and_check_data_to_database(
 
 def main(
     start_date: datetime.date,
-    instrument_substring: str,
+    instrument_name: str,
     chunk_size: int,
     cpu_count: int,
     days_to_observe: int,
@@ -151,7 +151,7 @@ def main(
         start_date, datetime.today().date(), freq="D", inclusive="left"
     )
     for table in (
-        get_table_names_sql() if not instrument_substring else instrument_substring
+        get_table_names_sql() if not instrument_name else instrument_name
     ):
         LOGGER.info(f"Checking data for {table}.")
         try:
@@ -166,7 +166,9 @@ def main(
 
             # Get name of the fits file
             instrument_name = reverse_extract_instrument_name(table)
+            LOGGER.info(f"Found instrument name: {instrument_name}")
             instrument_regexr_pattern = instrument_name_to_regex_pattern(instrument_name)
+            LOGGER.info(f"Found instrument regex pattern: {instrument_regexr_pattern}")
             # Add the data to the database
             for date in tqdm(
                 dates_to_add,
@@ -200,12 +202,11 @@ if __name__ == "__main__":
         default=(datetime.today().date() - timedelta(days=1)).strftime("%Y-%m-%d"),
     )
     parser.add_argument(
-        "--instrument_substring",
+        "--instrument_name",
         type=str,
         default="None",
-        help="Instrument glob pattern. Default is 'None', which means all instruments currently in the database and every newly added instrument \
-        (added in the last two days). Accepts also a list of instruments, e.g. 'Australia-ASSA, Arecibo-Observatory, HUMAIN, SWISS-Landschlacht, ALASKA-COHOE' \
-        If you pass a List, only those instruments are updated and the ones added in the last two days are added.",
+        help="Instrument name. Default is 'None', which means all instruments currently in the database and every newly added instrument \
+        (added in the last two days).",
     )
     parser.add_argument(
         "--days_to_observe",
@@ -229,11 +230,9 @@ if __name__ == "__main__":
     # Update date to datetime
     args.start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
     # Update instrument glob pattern to all if needed or convert to list
-    args.instrument_substring = (
-        None if args.instrument_substring == "None" else args.instrument_substring
+    args.instrument_name = (
+        None if args.instrument_name == "None" else args.instrument_name
     )
-    if args.instrument_substring is not None and "," in args.instrument_substring:
-        args.instrument_substring = args.instrument_substring.split(", ")
     LOGGER.info(f"Adding data from {args.start_date}. Args: {args}")
     try:
         # Main
