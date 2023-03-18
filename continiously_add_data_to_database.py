@@ -184,7 +184,7 @@ def main(
                 add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
             # Check if new data is added
             add_and_check_data_to_database(
-                instrument_substring, chunk_size, cpu_count, days_to_observe
+                instrument_name, chunk_size, cpu_count, days_to_observe
             )
         except Exception as e:
             LOGGER.error(f"Error adding data to {table}: {e}")
