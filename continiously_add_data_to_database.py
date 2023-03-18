@@ -8,7 +8,7 @@ from multiprocessing.pool import Pool as Pool
 from tqdm import tqdm
 
 import logging_utils
-from data_creation import check_difference_between_two_reports, get_urls
+from data_creation import check_difference_between_two_reports, get_urls, instrument_name_to_regex_pattern
 from database_functions import *
 from database_utils import *
 
@@ -53,13 +53,14 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
 
 
 def add_and_check_data_to_database(
-    instrument_substring, chunk_size, cpu_count, days_to_observe
+    instrument_name , chunk_size, cpu_count, days_to_observe
 ):
     # Check data for today and yesterday to create the database.
     LOGGER.info("Checking data for today to create the database.")
     today = datetime.today().date()
+    instrument_regexr_pattern = instrument_name_to_regex_pattern(instrument_name)
     current_status = get_urls(
-        today - timedelta(days=days_to_observe), today, instrument_substring
+        today - timedelta(days=days_to_observe), today, instrument_regexr_pattern 
     )
     current_status = pd.DataFrame(current_status)
     # Create the data_today folder if it does not exist
@@ -110,7 +111,7 @@ def main(
     ----------
     start_date : datetime.date
         The starting date for adding instrument data to the database.
-    instrument_substring : str
+    instrument_name : str
         A substring to match instrument names with.
     chunk_size : int
         The number of instrument data files to add to the database at once.
@@ -134,16 +135,16 @@ def main(
     January 1st, 2023 with a days chunk size of 30, a chunk size of 100, and 8 CPU cores, you could run:
 
     >>> start_date = datetime.date(2023, 1, 1)
-    >>> instrument_substring = 'ALASKA-COHOE'
+    >>> instrument_name = 'ALASKA-COHOE'
     >>> days_chunk_size = 30
     >>> chunk_size = 100
     >>> cpu_count = 8
     >>> days_to_observe = 14
-    >>> main(start_date, instrument_substring, days_chunk_size, chunk_size, cpu_count, days_to_observe)
+    >>> main(start_date, instrument_name, days_chunk_size, chunk_size, cpu_count, days_to_observe)
     """
     # Add data for today and yesterday to create the database and add new instruments added today.
     add_and_check_data_to_database(
-        instrument_substring, chunk_size, cpu_count, days_to_observe
+        instrument_name, chunk_size, cpu_count, days_to_observe
     )
     # Create a list of dates to add to the database
     dates_to_add = pd.date_range(
@@ -164,8 +165,8 @@ def main(
             )
 
             # Get name of the fits file
-            instrument_name = [reverse_extract_instrument_name(table).lower()]
-
+            instrument_name = reverse_extract_instrument_name(table)
+            instrument_regexr_pattern = instrument_name_to_regex_pattern(instrument_name)
             # Add the data to the database
             for date in tqdm(
                 dates_to_add,
@@ -176,14 +177,14 @@ def main(
                 status = get_urls(
                     date,
                     date,
-                    instrument_name,
+                    instrument_regexr_pattern,
                 )
                 add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
             # Check if new data is added
             add_and_check_data_to_database(
                 instrument_substring, chunk_size, cpu_count, days_to_observe
             )
-        except ImportError as e:
+        except Exception as e:
             LOGGER.error(f"Error adding data to {table}: {e}")
 
 

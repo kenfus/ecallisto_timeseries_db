@@ -242,7 +242,7 @@ def instrument_name_to_regex_pattern(instrument_name):
     else:
         pattern = pattern + ".+"
         name = instrument_name
-    pattern = "(" + name.replace("-", "\-").replace("_", "\_") + pattern + ")"
+    pattern = "(" + name.replace("-", "\-") + pattern + ")"
     return pattern
 
 

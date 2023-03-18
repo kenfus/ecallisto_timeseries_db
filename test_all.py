@@ -127,12 +127,12 @@ def test_sql_column_creation(names, types, expected):
             "(ALASKA\-COHOE_\d{8}_\d{6}_62.+)",
         ),
         (
-            "ALASKA_COHOE",
-            "(ALASKA\_COHOE_\d{8}_\d{6}.+)",
+            "ALASKA-COHOE",
+            "(ALASKA\-COHOE_\d{8}_\d{6}.+)",
         ),
         (
-            "ALASKA_COHOE_62",
-            "(ALASKA\_COHOE_\d{8}_\d{6}_62.+)",
+            "ALASKA-COHOE_62",
+            "(ALASKA\-COHOE_\d{8}_\d{6}_62.+)",
         ),
         ("FHN-W_11", "(FHN\-W_\d{8}_\d{6}_11.+)"),
         (None, "([A-Za-z0-9\-]+_\d{8}_\d{6}.+)"),
