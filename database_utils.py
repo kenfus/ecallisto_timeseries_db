@@ -239,7 +239,7 @@ def add_spec_from_path_to_database(
         progress.value += 1
     try:
         with HiddenPrints():  # Hide the download success answer by radiospectra
-            spec = CallistoSpectrogram.read(path)
+            spec = CallistoSpectrogram.read(path, cache=False)
     except Exception as e:
         LOGGER.error(f"Error: {e} for {os.path.basename(path)}")
         return

@@ -192,7 +192,7 @@ def main(
 
 if __name__ == "__main__":
     ## Example:
-    # python continiously_add_data_to_database.py --start_date 2023-03-01
+    # python continiously_add_data_to_database.py --start_date 2021-03-01
     # The parameter for the multiprocessing is optimized via cprofiler.
     # Get arguments from command line
     parser = argparse.ArgumentParser()

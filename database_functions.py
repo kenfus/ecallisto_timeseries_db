@@ -18,7 +18,42 @@ if "PGDATABASE" not in os.environ:
 ##
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
 
+def create_continuous_aggregate_view_no_refresh(table_name):
+    view_name = f"{table_name}_daily_row_count"
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            CREATE MATERIALIZED VIEW {view_name}
+            WITH (timescaledb.continuous) AS
+            SELECT time_bucket('1 day', datetime) AS day,
+                   COUNT(*) AS row_count
+            FROM {table_name}
+            GROUP BY day
+            WITH NO DATA;
+        """)
+        conn.commit()
 
+
+def set_daily_refresh_policy(view_name):
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT add_continuous_aggregate_policy('{view_name}',
+                start_offset => INTERVAL '2 day',
+                end_offset => INTERVAL '0 min',
+                schedule_interval => INTERVAL '1 day');
+        """)
+        conn.commit()
+    
+def check_daily_row_count(table_name):
+    view_name = f"{table_name}_daily_row_count"
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT * FROM {view_name};")
+        results = cur.fetchall()
+    return results
+         
+     
 def create_table_sql(table_name, columns):
     """
     Creates a table with the given name and columns
@@ -80,6 +115,22 @@ def drop_table_sql(table_name):
         cursor.close()
 
 
+def count_rows_of_data_per_day_per_table_sql(table_name):
+    """
+    Returns the number of rows per day per table
+    """
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT date_trunc('day', datetime) as day, COUNT(*)
+                        FROM {table_name}
+                        GROUP BY day
+                        ORDER BY day;
+                        """
+        )
+        tuple_list = cursor.fetchall()
+        return [tup for tup in tuple_list]
+     
 def get_table_names_sql():
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
