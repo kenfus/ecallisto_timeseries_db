@@ -45,7 +45,7 @@ def set_daily_refresh_policy(view_name):
         """)
         conn.commit()
     
-def check_daily_row_count(table_name):
+def get_daily_rows_for_table_sql(table_name):
     view_name = f"{table_name}_daily_row_count"
     with psycopg2.connect(CONNECTION) as conn:
         cur = conn.cursor()
