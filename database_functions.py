@@ -2,6 +2,9 @@ import os
 
 import pandas as pd
 import psycopg2
+from datetime import datetime
+
+from typing import List
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
@@ -28,8 +31,7 @@ def create_continuous_aggregate_view_no_refresh(table_name):
             SELECT time_bucket('1 day', datetime) AS day,
                    COUNT(*) AS row_count
             FROM {table_name}
-            GROUP BY day
-            WITH NO DATA;
+            GROUP BY day;
         """)
         conn.commit()
 
@@ -52,8 +54,14 @@ def get_daily_rows_for_table_sql(table_name):
         cur.execute(f"SELECT * FROM {view_name};")
         results = cur.fetchall()
     return results
-         
-     
+
+def drop_daily_rows_for_table_sql(table_name):
+    view_name = f"{table_name}_daily_row_count"
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {view_name};")
+        conn.commit()
+
 def create_table_sql(table_name, columns):
     """
     Creates a table with the given name and columns
@@ -289,9 +297,6 @@ def get_rolling_mean_sql(table, start_time, end_time, timebucket="1H"):
         return df
 
 
-from typing import List
-
-import psycopg2
 
 
 def timebucket_values_from_database_sql(
