@@ -12,6 +12,8 @@ from data_creation import check_difference_between_two_reports, get_urls, instru
 from database_functions import *
 from database_utils import *
 
+from astropy.utils.data import clear_download_cache
+
 LOGGER = logging_utils.setup_custom_logger("database_data_addition")
 URL_FILE = "added_data_log/urls.parquet"
 
@@ -50,6 +52,9 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
         # Wait for all tasks to complete
         pool.close()
         pool.join()
+
+    # Clear the cache to avoid memory issues
+    clear_download_cache()
 
 
 def add_and_check_data_to_database(
