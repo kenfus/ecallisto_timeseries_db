@@ -31,32 +31,30 @@ def __create_log_path(log_name):
 
 def setup_custom_logger(name, level=logging.INFO):
     # logger settings
-    log_file = __create_log_path(name)
-    log_file_max_size = 1024 * 1024 * 20  # megabytes
-    log_num_backups = 3
     log_format = "%(asctime)s [%(levelname)s] %(filename)s/%(funcName)s:%(lineno)s >> %(message)s"
-    log_filemode = "w"  # w: overwrite; a: append
 
-    # setup logger
-    logging.basicConfig(
-        filename=log_file,
-        format=log_format,
-        filemode=log_filemode,
-        level=level,
+    # setup logger with TimedRotatingFileHandler
+    handler = logging.handlers.TimedRotatingFileHandler(
+        __create_log_path(name),
+        when='midnight',
+        backupCount=3,
+        encoding='utf-8',
+        delay=False,
+        utc=False,
+        atTime=datetime.now().time(),
     )
-    rotate_file = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=log_file_max_size, backupCount=log_num_backups
-    )
+    handler.setFormatter(logging.Formatter(log_format))
     logger = logging.getLogger(name)
-    logger.addHandler(rotate_file)
+    logger.setLevel(level)
+    logger.addHandler(handler)
 
     # print log messages to console
     consoleHandler = logging.StreamHandler()
-    logFormatter = logging.Formatter(log_format)
-    consoleHandler.setFormatter(logFormatter)
+    consoleHandler.setFormatter(logging.Formatter(log_format))
     logger.addHandler(consoleHandler)
 
     return logger
+
 
 
 # logger = setup_custom_logger("ecallisto")

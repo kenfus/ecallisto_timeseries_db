@@ -31,17 +31,37 @@ def create_continuous_aggregate_view_no_refresh(table_name):
             SELECT time_bucket('1 day', datetime) AS day,
                    COUNT(*) AS row_count
             FROM {table_name}
-            GROUP BY day;
+            GROUP BY day
+            WITH NO DATA;
         """)
         conn.commit()
 
+def remove_continuous_aggregate_policy(table_name):
+    view_name = f"{table_name}_daily_row_count"
 
-def set_daily_refresh_policy(view_name):
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT remove_continuous_aggregate_policy('{view_name}');
+        """)
+        conn.commit()
+
+def recompute_continuous_aggregate_view(table_name):
+    view_name = f"{table_name}_daily_row_count"
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT refresh_continuous_aggregate('{view_name}');
+        """)
+        conn.commit()
+        
+def set_daily_refresh_policy(table_name):
+    view_name = f"{table_name}_daily_row_count"
     with psycopg2.connect(CONNECTION) as conn:
         cur = conn.cursor()
         cur.execute(f"""
             SELECT add_continuous_aggregate_policy('{view_name}',
-                start_offset => INTERVAL '2 day',
+                start_offset => INTERVAL '20 year',
                 end_offset => INTERVAL '0 min',
                 schedule_interval => INTERVAL '1 day');
         """)
