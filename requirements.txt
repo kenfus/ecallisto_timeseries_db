@@ -8,5 +8,7 @@ ruptures
 opencv-python
 seaborn
 pyarrow
+fastapi
+uvicorn
 # conda install -c pyviz holoviews
 # conda install -c plotly plotly=5.13.0

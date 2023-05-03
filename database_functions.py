@@ -36,6 +36,14 @@ def create_continuous_aggregate_view_no_refresh(table_name):
         """)
         conn.commit()
 
+def get_daily_rows_for_table_sql(table_name):
+    view_name = f"{table_name}_daily_row_count"
+    with psycopg2.connect(CONNECTION) as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT * FROM {view_name};")
+        results = cur.fetchall()
+    return results
+         
 def remove_continuous_aggregate_policy(table_name):
     view_name = f"{table_name}_daily_row_count"
 
@@ -357,7 +365,7 @@ def timebucket_values_from_database_sql(
         with conn.cursor() as cur:
             query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_time}' AND '{end_time}' GROUP BY time ORDER BY time"
             cur.execute(query)
-            return cur.fetchall()
+            return [dict(zip(columns, row)) for row in cur.fetchall()]  # return list of dict
 
 
 def get_min_max_datetime_from_table_sql(table_name) -> tuple:
@@ -510,10 +518,15 @@ def get_values_from_database_sql(table, start_time, end_time, columns=None):
             return cur.fetchall()
 
 
-def sql_result_to_df(result, datetime_col, columns, meta_data: dict = None):
+def sql_result_to_df(result, datetime_col, columns: None, meta_data: dict = None):
     """
     Converts the given result from a sql query to a pandas dataframe
     """
+    if columns is None:
+        if isinstance(result[0], dict):
+            columns = list(result[0].keys())
+        else:
+            columns = [f"column_{i}" for i in range(len(result[0]))]
     df = pd.DataFrame(result, columns=columns)
     if datetime_col == "datetime":
         df["datetime"] = pd.to_datetime(df["datetime"])

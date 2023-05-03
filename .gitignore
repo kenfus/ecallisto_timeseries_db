@@ -7,3 +7,4 @@ test_data/**/*.fit.gz
 .vscode/*
 test_data/**.txt
 added_data_log/urls.parquet
+logs/**/*.log.*

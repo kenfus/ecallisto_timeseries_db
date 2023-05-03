@@ -22,6 +22,7 @@ from database_functions import (
     insert_values_sql,
     table_to_hyper_table,
     to_float_if_possible,
+    get_daily_rows_for_table_sql
 )
 from logging_utils import HiddenPrints
 from spectogram_utils import masked_spectogram_to_array, spec_time_to_pd_datetime
@@ -30,7 +31,7 @@ LOGGER = logging.getLogger("database_data_addition")
 
 
 def get_column_names_clean(
-    table_name, columns_to_drop=["burst_type"], columns_to_add=[]
+    column_names, columns_to_drop=["burst_type"], columns_to_add=[]
 ):
     """Get the column names of a table in the database.
 
@@ -40,7 +41,6 @@ def get_column_names_clean(
     Returns:
         list: List of column names without "" around the frequencies.
     """
-    column_names = get_column_names_sql(table_name)
     column_names = [name.replace('"', "") for name in column_names]
     column_names = [to_float_if_possible(name) for name in column_names]
     column_names = [name for name in column_names if name not in columns_to_drop]
@@ -49,6 +49,18 @@ def get_column_names_clean(
             column_names.insert(0, column)
     return column_names
 
+def get_daily_rows_for_tables(tables=None):
+    if tables is None:
+        tables = get_table_names_sql()
+    df = {}
+    for table in tqdm(tables):
+        try:
+            df[table] = pd.DataFrame(get_daily_rows_for_table_sql(table), columns=["date", table]).set_index('date')
+        except:
+            pass
+
+    return pd.concat(df.values(), axis=1, join='outer').reset_index()
+    
 
 def subtract_background_image(df, bg_df):
     """
