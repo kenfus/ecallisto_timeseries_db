@@ -155,10 +155,11 @@ def main(
     dates_to_add = pd.date_range(
         start_date, datetime.today().date(), freq="D", inclusive="left"
     )
-    for table in enumerate(
-        get_table_names_sql() if not instrument_name else instrument_name
+    iterator_tables = get_table_names_sql() if not instrument_name else instrument_name
+    for i, table in enumerate(
+        iterator_tables
     ):
-        LOGGER.info(f"Checking data for {table}. Table number {i + 1} of {len(tables)}")
+        LOGGER.info(f"Checking data for {table}. Table number {i + 1} of {len(iterator_tables)}")
         try:
             # Get distinct dates in the database
             dates_in_db = get_distinct_datetime_from_table(table)
