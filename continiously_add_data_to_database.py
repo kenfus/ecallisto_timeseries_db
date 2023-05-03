@@ -155,10 +155,10 @@ def main(
     dates_to_add = pd.date_range(
         start_date, datetime.today().date(), freq="D", inclusive="left"
     )
-    for table in (
+    for table in enumerate(
         get_table_names_sql() if not instrument_name else instrument_name
     ):
-        LOGGER.info(f"Checking data for {table}.")
+        LOGGER.info(f"Checking data for {table}. Table number {i + 1} of {len(tables)}")
         try:
             # Get distinct dates in the database
             dates_in_db = get_distinct_datetime_from_table(table)
@@ -175,6 +175,7 @@ def main(
             instrument_regexr_pattern = instrument_name_to_regex_pattern(instrument_name)
             LOGGER.info(f"Found instrument regex pattern: {instrument_regexr_pattern}")
             # Add the data to the database
+            days_added = 0
             for date in tqdm(
                 dates_to_add,
                 total=len(dates_to_add),
@@ -187,6 +188,7 @@ def main(
                     instrument_regexr_pattern,
                 )
                 add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
+                LOGGER.info(f"Added data for {date} to {table}. {days_added} out of {len(dates_to_add)}.")
             # Check if new data is added
             add_and_check_data_to_database(
                 instrument_name, chunk_size, cpu_count, days_to_observe
