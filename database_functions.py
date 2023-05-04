@@ -74,14 +74,6 @@ def set_daily_refresh_policy(table_name):
                 schedule_interval => INTERVAL '1 day');
         """)
         conn.commit()
-    
-def get_daily_rows_for_table_sql(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT * FROM {view_name};")
-        results = cur.fetchall()
-    return results
 
 def drop_daily_rows_for_table_sql(table_name):
     view_name = f"{table_name}_daily_row_count"
@@ -325,12 +317,10 @@ def get_rolling_mean_sql(table, start_time, end_time, timebucket="1H"):
         return df
 
 
-
-
 def timebucket_values_from_database_sql(
     table: str,
-    start_time: str,
-    end_time: str,
+    start_datetime: str,
+    end_datetime: str,
     columns: List[str] = None,
     timebucket: str = "1H",
     agg_function: str = "avg",
@@ -363,9 +353,9 @@ def timebucket_values_from_database_sql(
 
     with psycopg2.connect(CONNECTION) as conn:
         with conn.cursor() as cur:
-            query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_time}' AND '{end_time}' GROUP BY time ORDER BY time"
+            query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
             cur.execute(query)
-            return [dict(zip(columns, row)) for row in cur.fetchall()]  # return list of dict
+            return [dict(zip(['datetime'] + columns, row)) for row in cur.fetchall()]  # return list of dict
 
 
 def get_min_max_datetime_from_table_sql(table_name) -> tuple:
@@ -516,43 +506,6 @@ def get_values_from_database_sql(table, start_time, end_time, columns=None):
                 f"SELECT {columns} FROM {table} WHERE datetime BETWEEN '{start_time}' AND '{end_time}'"
             )
             return cur.fetchall()
-
-
-def sql_result_to_df(result, datetime_col, columns: None, meta_data: dict = None):
-    """
-    Converts the given result from a sql query to a pandas dataframe
-    """
-    if columns is None:
-        if isinstance(result[0], dict):
-            columns = list(result[0].keys())
-        else:
-            columns = [f"column_{i}" for i in range(len(result[0]))]
-    df = pd.DataFrame(result, columns=columns)
-    if datetime_col == "datetime":
-        df["datetime"] = pd.to_datetime(df["datetime"])
-    elif datetime_col == "time":
-        pass
-    else:
-        raise ValueError("datetime_col must be either 'datetime' or 'time'")
-    df = df.set_index(datetime_col)
-    # To float if possible
-    for column in df.columns:
-        try:
-            # Check if int is possible
-            if all(df[column].astype(int) == df[column]):
-                df[column] = df[column].astype(int)
-            else:
-                df[column] = df[column].astype(float)
-        except:
-            try:
-                df[column] = df[column].astype(float)
-            except:
-                pass
-    if meta_data:
-        for key, value in meta_data.items():
-            df.attrs[key] = value
-    return df
-
 
 def sql_background_image_to_df(result, columns=None, meta_data: dict = None):
     """

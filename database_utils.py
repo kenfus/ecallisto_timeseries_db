@@ -36,18 +36,23 @@ def get_column_names_clean(
     """Get the column names of a table in the database.
 
     Args:
-        table_name (str): Name of the table in the database.
+        column_names (list): List of column names to clean.
+        columns_to_drop (list): List of column names to drop.
+        columns_to_add (list): List of column names to add at the beginning.
 
     Returns:
-        list: List of column names without "" around the frequencies.
+        list: List of column names without "" around the frequencies and trailing zeros.
     """
     column_names = [name.replace('"', "") for name in column_names]
+    # Remove trailing zeros 
+    column_names = [name.rstrip('0').rstrip('.') for name in column_names]  
     column_names = [to_float_if_possible(name) for name in column_names]
     column_names = [name for name in column_names if name not in columns_to_drop]
     if len(columns_to_add) > 0:
         for column in columns_to_add:
             column_names.insert(0, column)
     return column_names
+
 
 def get_daily_rows_for_tables(tables=None):
     if tables is None:
@@ -61,6 +66,31 @@ def get_daily_rows_for_tables(tables=None):
 
     return pd.concat(df.values(), axis=1, join='outer').reset_index()
     
+def sql_result_to_df(result, datetime_col='datetime', columns: list = None, meta_data: dict = None):
+    """
+    Converts the given result from a sql query to a pandas dataframe
+    """
+    if columns is None:
+        if isinstance(result[0], dict):
+            columns = list(result[0].keys())
+            columns = get_column_names_clean(columns)
+        else:
+            columns = [f"column_{i}" for i in range(len(result[0]))]
+    df = pd.DataFrame(result)
+    df.columns = columns
+    if datetime_col == "datetime":
+        df["datetime"] = pd.to_datetime(df["datetime"])
+    elif datetime_col == "time":
+        pass
+    else:
+        raise ValueError("datetime_col must be either 'datetime' or 'time'")
+    df = df.set_index(datetime_col)
+    # make columns prettier if possible
+    df.columns = [col if col != '0' else '0.' for col in df.columns.astype(str).str.rstrip('0').str.rstrip('.')]
+    if meta_data:
+        for key, value in meta_data.items():
+            df.attrs[key] = value
+    return df
 
 def subtract_background_image(df, bg_df):
     """

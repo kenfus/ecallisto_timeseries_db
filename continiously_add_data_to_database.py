@@ -156,10 +156,10 @@ def main(
         start_date, datetime.today().date(), freq="D", inclusive="left"
     )
     iterator_tables = get_table_names_sql() if not instrument_name else instrument_name
-    for i, table in enumerate(
+    for table_id, table in enumerate(
         iterator_tables
     ):
-        LOGGER.info(f"Checking data for {table}. Table number {i + 1} of {len(iterator_tables)}")
+        LOGGER.info(f"Checking data for {table}. Table number {table_id + 1} of {len(iterator_tables)}")
         try:
             # Get distinct dates in the database
             dates_in_db = get_distinct_datetime_from_table(table)
@@ -190,6 +190,7 @@ def main(
                 )
                 add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
                 LOGGER.info(f"Added data for {date} to {table}. {days_added} out of {len(dates_to_add)}.")
+                days_added += 1
             # Check if new data is added
             add_and_check_data_to_database(
                 instrument_name, chunk_size, cpu_count, days_to_observe
