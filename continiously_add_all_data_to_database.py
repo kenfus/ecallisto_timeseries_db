@@ -4,11 +4,11 @@ import os
 from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
-
+import traceback
 from tqdm import tqdm
 
 import logging_utils
-from data_creation import check_difference_between_two_reports, get_urls, instrument_name_to_regex_pattern
+from data_creation import get_urls
 from database_functions import *
 from database_utils import *
 
@@ -35,10 +35,11 @@ def add_instruments_from_paths_to_database(dict_paths):
                 try:
                     add_instrument_from_path_to_database(path)
                     LOGGER.info(f"New instrument! Added {instrument} to database.")
-                except Exception as e:
-                    LOGGER.error(f"Error adding instrument {instrument}: {e}")
-                else:
                     break
+                except Exception as e:
+                    LOGGER.error(f"Error adding {instrument} to database: {e}")
+                    LOGGER.info(f"Trying next file for {instrument}.")
+
 
 
 def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
@@ -100,6 +101,9 @@ def main(
     dates_to_add = pd.date_range(
         start_date, datetime.today().date(), freq="D", inclusive="both"
     )
+    # Reverse the list of dates to add to the database
+    dates_to_add = dates_to_add[::-1]
+    
     LOGGER.info(f"Found {len(dates_to_add)} days to add to the database.")
     # Add the data to the database
     days_added = 0
@@ -115,7 +119,7 @@ def main(
                 date,
             )
             # Check if there are new instruments
-            dict_paths = create_dict_of_instrument_paths(status["url"].to_list())
+            dict_paths = create_dict_of_instrument_paths(status["url"])
             # Add the instruments to the database
             add_instruments_from_paths_to_database(dict_paths)
             # Add the dat a to the database
@@ -123,7 +127,9 @@ def main(
             LOGGER.info(f"Added data for {date}. {days_added} out of {len(dates_to_add)} done.")
             days_added += 1
         except Exception as e:
-            LOGGER.error(f"Error adding data for {date}: {e}")
+            tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+            tb_str = "".join(tb_str)  # Convert list of strings into a single string
+            LOGGER.error(f"Error adding data for {date}: {e}\nTraceback:\n{tb_str}")
 
 
 if __name__ == "__main__":

@@ -279,12 +279,10 @@ def add_spec_from_path_to_database(
     """
     if progress is not None:
         progress.value += 1
-    try:
-        with HiddenPrints():  # Hide the download success answer by radiospectra
-            spec = CallistoSpectrogram.read(path, cache=True)
-    except Exception as e:
-        LOGGER.error(f"Error: {e} for {os.path.basename(path)}")
-        return
+        
+    with HiddenPrints():  # Hide the download success answer by radiospectra
+        spec = CallistoSpectrogram.read(path, cache=True)
+
     spec = masked_spectogram_to_array(spec)
     instrument = extract_instrument_name(path)
 

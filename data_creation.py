@@ -173,7 +173,7 @@ def download_ecallisto_file(URL, return_download_path=False, dir=LOCAL_DATA_FOLD
         return file_path
 
 
-def get_urls(start_date, end_date, instrument_regexr_pattern) -> list[str]:
+def get_urls(start_date, end_date, instrument_regexr_pattern = None) -> list[str]:
     """
     Get the urls of fiz gz files for a given date range and instrument_glob_pattern.
 
