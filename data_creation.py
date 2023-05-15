@@ -117,7 +117,7 @@ def extract_content(
             regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE) if instrument_regexr_pattern is not None else None
             if instrument_regexr_pattern is None or re.search(regex_to_match, href):
                 content["file_name"].append(href)
-                if False: #return_date_size:
+                if False: #return_date_size: Currently INREDIBLE SLOW
                     date_changed, size = extract_date_size_from_soup(
                         soup, content["file_name"][-1]
                     )
