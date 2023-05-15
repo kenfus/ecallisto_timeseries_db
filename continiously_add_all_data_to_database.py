@@ -146,8 +146,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chunk_size",
         type=int,
-        default=10,
-        help="Chunk size for multiprocessing. Default is 10.",
+        default=100,
+        help="Chunk size for multiprocessing. Default is 100.",
     )
     parser.add_argument(
         "--cpu_count",
