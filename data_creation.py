@@ -31,7 +31,7 @@ session.mount("https://", adapter)
 
 def extract_date_from_path(path):
     """Extracts the date from a file path.
-    Example: /random_2313/ecallisto/2023/01/27/ALASKA_COHOE_20230127_001500_623.fit.gz -> 2023-01-27 00:15:00
+    Example: /random_2313/ecallisto/2023/01/27/ALASKA_COHOE_20230127_001500_623.fit.gz -> 20230127_001500
     """
     date = path.split("/")[-1].split(".")[0].split("_")
     if (
@@ -45,7 +45,7 @@ def extract_date_from_path(path):
 
 def fetch_content(url):
     reqs = session.get(url)
-    soup = BeautifulSoup(reqs.text, "html.parser")
+    soup = BeautifulSoup(reqs.text, "lxml")
     LOGGER.info(f"Fetching content from {url}")
     LOGGER.info(f"Status code: {reqs.status_code}")
     return soup
@@ -55,21 +55,23 @@ def extract_date_size_from_soup(soup, url):
     """
     Extracts the date and size of the file from the soup object
     """
-    date = soup.find("a", href=url).parent.find_next_sibling("td").text
-    size = (
-        soup.find("a", href=url)
-        .parent.find_next_sibling("td")
-        .find_next_sibling("td")
-        .text
-    )
-    return date, size
+    link_element = soup.find("a", href=url)
+    if link_element:
+        parent_td = link_element.parent.find_next_sibling("td")
+        if parent_td:
+            date = parent_td.text
+            size_td = parent_td.find_next_sibling("td")
+            if size_td:
+                size = size_td.text
+                return date, size
+    return None, None
 
 
 def extract_content(
     url,
     instrument_regexr_pattern,
     substring_must_match="fit.gz",
-    return_date_size=True,
+    return_date_size=False,
 ):
     """
     Get the URLs of .fiz.gz files for a given date range and instrument substring.
@@ -82,6 +84,8 @@ def extract_content(
         The end date.
     instrument_substring : {None, list of str}, optional
         The instrument substring name(s). If None, all instruments are considered. Also, the capitalization is ignored.
+    return_date_size: bool
+        If the file size and date of creation should be added. Currently very slow.
 
     Returns
     -------
@@ -108,11 +112,12 @@ def extract_content(
         substring_must_match = ".fit.gz"
 
     for link in soup.find_all("a"):
-        if substring_must_match in link.get("href"):
-            regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE)
-            if re.search(regex_to_match, link.get("href")):
-                content["file_name"].append(link.get("href"))
-                if return_date_size:
+        href = link.get("href")
+        if substring_must_match in href:
+            regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE) if instrument_regexr_pattern is not None else None
+            if instrument_regexr_pattern is None or re.search(regex_to_match, href):
+                content["file_name"].append(href)
+                if False: #return_date_size:
                     date_changed, size = extract_date_size_from_soup(
                         soup, content["file_name"][-1]
                     )
@@ -129,7 +134,7 @@ def extract_content(
 
 
 def extract_fiz_gz_files_urls(
-    year, month, day, instrument_regexr_pattern, return_date_size=True
+    year, month, day, instrument_regexr_pattern, return_date_size=False
 ):
     """
     Extracts all the .fit.gz files from the given year, month and day
@@ -191,10 +196,8 @@ def get_urls(start_date, end_date, instrument_regexr_pattern = None) -> list[str
     list of str
         The list of urls of fiz gz files.
     """
-    if instrument_regexr_pattern is None:
-        instrument_regexr_pattern = ".*"
     content = {"file_name": [], "url": [], "date": [], "size": [], "date_changed": []}
-    for date in tqdm(pd.date_range(start_date, end_date), desc="fetching urls"):
+    for date in tqdm(pd.date_range(start_date, end_date, inclusive='both'), desc="fetching urls"):
         content_ = extract_fiz_gz_files_urls(
             date.year,
             str(date.month).zfill(2),

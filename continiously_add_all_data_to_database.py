@@ -103,14 +103,14 @@ def main(
     )
     # Reverse the list of dates to add to the database
     dates_to_add = dates_to_add[::-1]
-    
+
     LOGGER.info(f"Found {len(dates_to_add)} days to add to the database.")
     # Add the data to the database
     days_added = 0
     for date in tqdm(
         dates_to_add,
         total=len(dates_to_add),
-        desc=f"Adding data from {start_date}",
+        desc=f"Adding data starting from {start_date}",
     ):
         # Get the urls
         try:
