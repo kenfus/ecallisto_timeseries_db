@@ -9,9 +9,8 @@ def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18):
         title=f"Spectogram of {instrument_name} from {start_datetime} to {end_datetime}",
         xaxis_title="Datetime",
         yaxis_title="Frequency",
-        font=dict(family="Courier New, monospace", size=size, color="#7f7f7f"),
+        font=dict(family="Courier New, monospace", size=size, color="#7f7f7f")
     )
-
     return fig
 
 

@@ -326,6 +326,7 @@ def timebucket_values_from_database_sql(
     agg_function: str = "avg",
     quantile_value: float = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    **kwargs,
 ):
     """
     Returns all values between start and end time in the given table, timebucketed and aggregated.

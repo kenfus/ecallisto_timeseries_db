@@ -679,6 +679,8 @@ def fill_missing_timesteps_with_nan(df):
     2023-02-19 03:00:00       NaN       NaN       NaN
     2023-02-19 05:00:00 -0.576182  1.222293 -0.416526
     """
+    # Change index to datetime, if it's not already
+    df.index = pd.to_datetime(df.index)
     time_delta = np.median(np.diff(df.index.values))
     time_delta = pd.Timedelta(time_delta)
     new_index = pd.date_range(df.index[0], df.index[-1], freq=time_delta)
