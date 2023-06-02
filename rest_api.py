@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 
 """
 Start the REST API with:
-uvicorn rest_api:app --reload
+uvicorn rest_api:app --reload (still in development, after it should be started as follows: gunicorn -k uvicorn.workers.UvicornWorker rest_api:app )
 You can then access the API at 
 http://127.0.0.1:8000/docs
 (with port forwading.)
