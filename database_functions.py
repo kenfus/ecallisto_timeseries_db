@@ -10,17 +10,16 @@ from typing import List
 os.environ["PGHOST"] = "localhost"
 # If no user is set, set it to postgres because that is the default user and it's hopefully not production
 if "PGUSER" not in os.environ:
-    os.environ["PGUSER"] = "postgres"
+    os.environ["PGUSER"] = "ecallisto_read_only"
 # If no password is set, set it to 1234 because that is the default password and it's hopefully not production
 if "PGPASSWORD" not in os.environ:
-    os.environ["PGPASSWORD"] = "1234"
+    raise ValueError("Please set the environment variable PGPASSWORD to the password of the postgres user.")
 # If no database is set, set it to tsdb because that is the default database and it's hopefully not production
 if "PGDATABASE" not in os.environ:
-    os.environ["PGDATABASE"] = "tsdb"
+    os.environ["PGDATABASE"] = "ecallisto_tsdb"
 
 ##
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
-
 def create_continuous_aggregate_view_no_refresh(table_name):
     view_name = f"{table_name}_daily_row_count"
     with psycopg2.connect(CONNECTION) as conn:
@@ -277,14 +276,14 @@ def truncate_table_sql(table_name):
 
 
 def get_column_names_sql(table_name):
+    query = f"""SELECT column_name
+                       FROM information_schema.columns
+                       WHERE table_name = '{table_name}'
+                       """
+    check_query_for_harmful_sql(query)
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"""SELECT column_name
-                       FROM information_schema.columns
-                       WHERE table_name = '{table_name}';
-                       """
-        )
+        cursor.execute(query)
 
         tuple_list = cursor.fetchall()
         tuple_list = [tup[0] for tup in tuple_list]
@@ -331,6 +330,37 @@ def timebucket_values_from_database_sql(
     """
     Returns all values between start and end time in the given table, timebucketed and aggregated.
     """
+    # Type checks
+    if not isinstance(table, str):
+        raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
+
+    if columns is not None and not all(isinstance(column, str) for column in columns):
+        raise TypeError("'columns' should be a list of str")
+    
+    # Check date
+    datetime_format = "%Y-%m-%d %H:%M:%S"
+    try:
+        datetime.strptime(start_datetime, datetime_format)
+    except ValueError:
+        raise ValueError("start_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'")
+
+    try:
+        datetime.strptime(end_datetime, datetime_format)
+    except ValueError:
+        raise ValueError("end_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'")
+
+    if timebucket[1] not in {"s", "m", "H", "D", "W", "M", "Y"} and not timebucket[0].isdigit():
+        raise TypeError(f"'timebucket' should be of str type, got {type(timebucket).__name__}")
+    
+    if agg_function not in {"MIN", "MAX", "AVG", "MEDIAN"}:
+        raise ValueError(f"'agg_function' should be one of 'MIN', 'MAX', 'AVG', 'MEDIAN'. Got {agg_function}")
+
+    if not isinstance(columns_not_to_select, list) or not all(isinstance(column, str) for column in columns_not_to_select):
+        raise TypeError("'columns_not_to_select' should be a list of str")
+    
+    if quantile_value is not None and not isinstance(quantile_value, float):
+        raise TypeError(f"'quantile_value' should be of float type, got {type(quantile_value).__name__}")
+    
     if not columns:
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]
@@ -352,9 +382,14 @@ def timebucket_values_from_database_sql(
             [f"{agg_function}({column}) AS {column}" for column in columns]
         )
 
+    # Query
+    query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
+    
+    # Check the query for harmful SQL
+    check_query_for_harmful_sql(query)
+
     with psycopg2.connect(CONNECTION) as conn:
         with conn.cursor() as cur:
-            query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
             cur.execute(query)
             return [dict(zip(['datetime'] + columns, row)) for row in cur.fetchall()]  # return list of dict
 
@@ -592,6 +627,23 @@ def get_spectogram_background_image_sql(
             cur.execute(query)
             return cur.fetchall()
 
+def check_query_for_harmful_sql(query: str):
+    harmful_patterns = [
+    "DROP TABLE",
+    "DELETE FROM",
+    "UPDATE",
+    "TRUNCATE TABLE",
+    "ALTER TABLE",
+    "CREATE TABLE",
+    "DROP DATABASE",
+    "EXEC",  # or "EXECUTE"
+    "EXECUTE",
+    "UNION SELECT",
+    ";",  # semicolon
+]
+    if any(pattern in query.upper() for pattern in harmful_patterns):
+        raise ValueError("Detected potentially harmful SQL pattern in the query.")
+    return query
 
 def sort_column_names(list):
     return sorted(list, key=lambda x: to_float_if_possible_else_number(x, -1000))

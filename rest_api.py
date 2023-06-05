@@ -29,7 +29,6 @@ class DataRequest(BaseModel):
     return_type: str = 'json'
     columns: List[str] = None
     quantile_value: float = None
-    columns_not_to_select: List[str] = ["datetime", "burst_type"]
 
 @app.post("/data")
 def get_data(data_request: DataRequest):
