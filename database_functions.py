@@ -1,10 +1,9 @@
 import os
+from datetime import datetime
+from typing import List
 
 import pandas as pd
 import psycopg2
-from datetime import datetime
-
-from typing import List
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
@@ -13,7 +12,7 @@ if "PGUSER" not in os.environ:
     os.environ["PGUSER"] = "ecallisto_read_only"
 # If no password is set, set it to 1234 because that is the default password and it's hopefully not production
 if "PGPASSWORD" not in os.environ:
-    raise ValueError("Please set the environment variable PGPASSWORD to the password of the postgres user.")
+    os.environ["PGPASSWORD"] = "1234"
 # If no database is set, set it to tsdb because that is the default database and it's hopefully not production
 if "PGDATABASE" not in os.environ:
     os.environ["PGDATABASE"] = "ecallisto_tsdb"

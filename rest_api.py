@@ -1,14 +1,14 @@
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
-from typing import List
-from pydantic import BaseModel
-from database_functions import timebucket_values_from_database_sql
-from database_utils import sql_result_to_df, get_table_names_sql
-from astropy.table import Table
-from astropy.io import fits
 import io
-from fastapi.responses import StreamingResponse, RedirectResponse
+from typing import List
 
+from astropy.io import fits
+from astropy.table import Table
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
+
+from database_functions import timebucket_values_from_database_sql
+from database_utils import get_table_names_sql, sql_result_to_df
 
 """
 Start the REST API with:

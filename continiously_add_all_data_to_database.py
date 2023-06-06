@@ -1,18 +1,18 @@
 import argparse
 import multiprocessing as mp
 import os
+import traceback
 from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
-import traceback
+
+from astropy.utils.data import clear_download_cache
 from tqdm import tqdm
 
 import logging_utils
 from data_creation import get_urls
 from database_functions import *
 from database_utils import *
-
-from astropy.utils.data import clear_download_cache
 
 LOGGER = logging_utils.setup_custom_logger("database_data_addition")
 URL_FILE = "added_data_log/urls.parquet"
