@@ -1,14 +1,14 @@
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+from typing import List
+from pydantic import BaseModel
+from database_functions import timebucket_values_from_database_sql
+from database_utils import sql_result_to_df, get_table_names_sql
+from astropy.table import Table
+from astropy.io import fits
 import io
 from typing import List
-
-from astropy.io import fits
-from astropy.table import Table
-from fastapi import FastAPI
 from fastapi.responses import RedirectResponse, StreamingResponse
-from pydantic import BaseModel, Field
-
-from database_functions import timebucket_values_from_database_sql
-from database_utils import get_table_names_sql, sql_result_to_df
 
 """
 Start the REST API with:
@@ -29,7 +29,7 @@ app = FastAPI(
 )
 
 class DataRequest(BaseModel):
-    instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql())
+    instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql(), example='austria_unigraz_01')
     start_datetime: str = Field('2021-03-10 06:30:00', description='The start datetime for the data request')
     end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
     timebucket: str = Field('5m', description='The time bucket for aggregation')
@@ -74,32 +74,35 @@ def get_data(data_request: DataRequest):
         return df.to_dict()
     
     elif data_request_dict['return_type'] == 'fits':
-        # Write the table to a FITS file in memory
-        table = Table.from_pandas(df)
-        file_like = io.BytesIO()
-        hdu = fits.table_to_hdu(table)
-        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
-        hdul.writeto(file_like)
+        return return_fits(df, data_request_dict)
 
-        # Move the cursor to the start of the BytesIO object
-        file_like.seek(0)
 
-        # Define a generator that yields file data in chunks
-        def iterfile():
-            chunk_size = 8192
-            while True:
-                chunk = file_like.read(chunk_size)
-                if not chunk:
-                    break
-                yield chunk
+def return_fits(df, data_request_dict):
+    # Write the table to a FITS file in memory
+    table = Table.from_pandas(df)
+    file_like = io.BytesIO()
+    hdu = fits.table_to_hdu(table)
+    hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+    hdul.writeto(file_like)
 
-        # Define the filename for the download
-        filename = f"{data_request_dict['instrument_name']}_{data_request_dict['start_datetime']}_{data_request_dict['end_datetime']}.fits"
+    # Move the cursor to the start of the BytesIO object
+    file_like.seek(0)
 
-        # Return the FITS file as a downloadable attachment
-        return StreamingResponse(
-            iterfile(),
-            media_type='application/octet-stream',
-            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
-        )
+    # Define a generator that yields file data in chunks
+    def iterfile():
+        chunk_size = 8192
+        while True:
+            chunk = file_like.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
+    # Define the filename for the download
+    filename = f"{data_request_dict['instrument_name']}_{data_request_dict['start_datetime']}_{data_request_dict['end_datetime']}.fits"
+
+    # Return the FITS file as a downloadable attachment
+    return StreamingResponse(
+        iterfile(),
+        media_type='application/octet-stream',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
