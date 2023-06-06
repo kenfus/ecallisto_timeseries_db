@@ -1,12 +1,14 @@
 from fastapi import FastAPI
+from pydantic import BaseModel, Field
 from typing import List
 from pydantic import BaseModel
 from database_functions import timebucket_values_from_database_sql
-from database_utils import sql_result_to_df
+from database_utils import sql_result_to_df, get_table_names_sql
 from astropy.table import Table
 from astropy.io import fits
 import io
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
+
 
 """
 Start the REST API with:
@@ -18,20 +20,47 @@ or http://147.86.10.169/docs
 when inside the FHNW network.
 """
 
-app = FastAPI()
+app = FastAPI(
+    title="E-Callisto REST API",
+    description="REST API for the E-Callisto database",
+    version="0.1",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 class DataRequest(BaseModel):
-    instrument_name: str = 'austria_unigraz_01'
-    start_datetime: str = '2021-03-10 21:30:00'
-    end_datetime: str = '2021-03-11 21:30:00'
-    timebucket: str = '1m'
-    agg_function: str = 'MAX'
-    return_type: str = 'json'
-    columns: List[str] = None
-    quantile_value: float = None
+    instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql())
+    start_datetime: str = Field('2021-03-10 06:30:00', description='The start datetime for the data request')
+    end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
+    timebucket: str = Field('5m', description='The time bucket for aggregation')
+    agg_function: str = Field('MAX', description='The aggregation function')
+    return_type: str = Field('json', description='The desired return type')
+    columns: List[str] = Field(None, description='List of columns to include in the response')
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/redoc")
 
 @app.post("/data")
 def get_data(data_request: DataRequest):
+    """
+    Retrieve data based on the provided data request.
+
+    This route retrieves data from the E-Callisto database based on the specified parameters in the data request.
+
+    - `instrument_name`: The name of the instrument.
+    - `start_datetime`: The start datetime for the data request.
+    - `end_datetime`: The end datetime for the data request.
+    - `timebucket`: The time bucket for aggregation.
+    - `agg_function`: The aggregation function.
+    - `return_type`: The desired return type.
+    - `columns`: List of columns to include in the response.
+
+    Returns:
+        - If `return_type` is 'json': The data as a JSON object.
+        - If `return_type` is 'fits': The data as a downloadable FITS file.
+
+    """
     data_request_dict = data_request.dict()
     data_request_dict['table'] = data_request_dict.pop('instrument_name')
 

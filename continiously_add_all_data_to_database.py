@@ -60,6 +60,7 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
 
 def main(
     start_date: datetime.date,
+    end_date: datetime.date,
     chunk_size: int,
     cpu_count: int
 ) -> None:
@@ -70,6 +71,8 @@ def main(
     ----------
     start_date : datetime.date
         The starting date for adding instrument data to the database.
+    end_date : datetime.date
+        The ending date for adding instrument data to the database.
     chunk_size : int
         The number of instrument data files to add to the database at once.
     cpu_count : int
@@ -99,7 +102,7 @@ def main(
     """
     # Create a list of dates to add to the database
     dates_to_add = pd.date_range(
-        start_date, datetime.today().date(), freq="D", inclusive="both"
+        start_date, end_date, freq="D", inclusive="both"
     )
     # Reverse the list of dates to add to the database
     dates_to_add = dates_to_add[::-1]
@@ -142,6 +145,11 @@ if __name__ == "__main__":
         "--start_date",
         type=str,
         default=(datetime.today().date() - timedelta(days=1)).strftime("%Y-%m-%d"),
+    )
+    parser.add_argument(
+        "--end_date",
+        type=str,
+        default=(datetime.today().date()).strftime("%Y-%m-%d"),
     )
     parser.add_argument(
         "--chunk_size",
