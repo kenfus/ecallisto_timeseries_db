@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import List
 from pydantic import BaseModel
-from database_functions import timebucket_values_from_database_sql
+from database_functions import timebucket_values_from_database_sql, values_from_database_sql
 from database_utils import sql_result_to_df, get_table_names_sql
 from astropy.table import Table
 from astropy.io import fits
@@ -16,32 +16,32 @@ uvicorn rest_api:app --reload (still in development, after it should be started 
 You can then access the API at 
 http://127.0.0.1:8000/docs
 (with port forwading.)
-or http://147.86.10.169/docs 
-when inside the FHNW network.
+or https://v000792.fhnw.ch/api/
 """
 
 app = FastAPI(
     title="E-Callisto REST API",
+    openapi_url="/api/openapi.json",
     description="REST API for the E-Callisto database",
     version="0.1",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 class DataRequest(BaseModel):
     instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql(), example='austria_unigraz_01')
     start_datetime: str = Field('2021-03-10 06:30:00', description='The start datetime for the data request')
     end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
-    timebucket: str = Field('5m', description='The time bucket for aggregation')
-    agg_function: str = Field('MAX', description='The aggregation function')
+    timebucket: str = Field(None, description='The time bucket for aggregation')
+    agg_function: str = Field(None, description='The aggregation function', enum=["MIN", "MAX", "AVG", "MEDIAN"])
     return_type: str = Field('json', description='The desired return type', enum=['json', 'fits'])
     columns: List[str] = Field(None, description='List of columns to include in the response')
 
 @app.get("/")
 def root():
-    return RedirectResponse(url="/redoc")
+    return RedirectResponse(url="/api/redoc")
 
-@app.post("/data")
+@app.post("/api/data")
 def get_data(data_request: DataRequest):
     """
     Retrieve data based on the provided data request.
@@ -65,7 +65,10 @@ def get_data(data_request: DataRequest):
     data_request_dict['table'] = data_request_dict.pop('instrument_name')
 
     # Get data
-    data = timebucket_values_from_database_sql(**data_request_dict)
+    if not any([data_request_dict['timebucket'], data_request_dict['agg_function']]):
+        data = values_from_database_sql(**data_request_dict)
+    else:
+        data = timebucket_values_from_database_sql(**data_request_dict)
 
     # Change data to dataframe
     df = sql_result_to_df(data)

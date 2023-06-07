@@ -84,12 +84,12 @@ def sql_result_to_df(result, datetime_col='datetime', columns: list = None, meta
     else:
         raise ValueError("datetime_col must be either 'datetime' or 'time'")
     df = df.set_index(datetime_col)
-    # make columns prettier if possible
+    # make columns prettier if possible by removing trailing 0s.
     df.columns = [col if col != '0' else '0.' for col in df.columns.astype(str).str.rstrip('0').str.rstrip('.')]
     if meta_data:
         for key, value in meta_data.items():
             df.attrs[key] = value
-    return df
+    return df.dropna(how="all", axis=1)
 
 def subtract_background_image(df, bg_df):
     """

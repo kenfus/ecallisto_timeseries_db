@@ -315,6 +315,55 @@ def get_rolling_mean_sql(table, start_time, end_time, timebucket="1H"):
         )
         return df
 
+def values_from_database_sql(
+    table: str,
+    start_datetime: str,
+    end_datetime: str,
+    columns: List[str] = None,
+    columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    **kwargs,
+):
+    """
+    Returns all values between start and end time in the given table, without any aggregation.
+    """
+    # Type checks
+    if not isinstance(table, str):
+        raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
+
+    if columns is not None and not all(isinstance(column, str) for column in columns):
+        raise TypeError("'columns' should be a list of str")
+    
+    # Check date
+    datetime_format = "%Y-%m-%d %H:%M:%S"
+    try:
+        datetime.strptime(start_datetime, datetime_format)
+    except ValueError:
+        raise ValueError("start_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'")
+
+    try:
+        datetime.strptime(end_datetime, datetime_format)
+    except ValueError:
+        raise ValueError("end_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'")
+
+    if not isinstance(columns_not_to_select, list) or not all(isinstance(column, str) for column in columns_not_to_select):
+        raise TypeError("'columns_not_to_select' should be a list of str")
+    
+    if not columns:
+        columns = get_column_names_sql(table)
+        columns = [column for column in columns if column not in columns_not_to_select]
+
+    # Query
+    columns_sql = ",".join(columns)
+    query = f"SELECT datetime, {columns_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}'"
+    
+    # Check the query for harmful SQL
+    check_query_for_harmful_sql(query)
+
+    with psycopg2.connect(CONNECTION) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            return [dict(zip(['datetime'] + columns, row)) for row in cur.fetchall()]  # return list of dict
+
 
 def timebucket_values_from_database_sql(
     table: str,

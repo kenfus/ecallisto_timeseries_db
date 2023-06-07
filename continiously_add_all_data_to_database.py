@@ -58,11 +58,11 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
     # Clear the cache to avoid memory issues
     clear_download_cache()
 
-def main(
-    start_date: datetime.date,
-    end_date: datetime.date,
-    chunk_size: int,
-    cpu_count: int
+def add_data_to_database(
+    start_date: datetime.date = datetime.now().date() - timedelta(days=7),
+    end_date: datetime.date = datetime.now().date(),
+    chunk_size: int = 100,
+    cpu_count: int = os.cpu_count(),
 ) -> None:
     """
     Add instrument data to a database.
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--start_date",
         type=str,
-        default=(datetime.today().date() - timedelta(days=1)).strftime("%Y-%m-%d"),
+        default=(datetime.today().date() - timedelta(days=14)).strftime("%Y-%m-%d"),
     )
     parser.add_argument(
         "--end_date",
@@ -164,12 +164,10 @@ if __name__ == "__main__":
         help="Number of CPUs to use. Default is all available CPUs.",
     )
     args = parser.parse_args()
-    # Update date to datetime
-    args.start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
     LOGGER.info(f"Adding data from {args.start_date}. Args: {args}")
     try:
         # Main
-        main(**vars(args))
+        add_data_to_database(**vars(args))
     except Exception as e:
         LOGGER.exception(e)
         raise e
