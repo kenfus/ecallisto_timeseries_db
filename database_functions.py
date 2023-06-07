@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from typing import List
 
@@ -348,9 +349,10 @@ def timebucket_values_from_database_sql(
     except ValueError:
         raise ValueError("end_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'")
 
-    if timebucket[1] not in {"s", "m", "H", "D", "W", "M", "Y"} and not timebucket[0].isdigit():
-        raise TypeError(f"'timebucket' should be of str type, got {type(timebucket).__name__}")
-    
+    pattern = r"^\d+(\.\d+)?\D+$"
+    if not re.match(pattern, timebucket):
+        raise TypeError(f"'timebucket' should be in the form <value><unit>, got {timebucket}")
+
     if agg_function not in {"MIN", "MAX", "AVG", "MEDIAN"}:
         raise ValueError(f"'agg_function' should be one of 'MIN', 'MAX', 'AVG', 'MEDIAN'. Got {agg_function}")
 

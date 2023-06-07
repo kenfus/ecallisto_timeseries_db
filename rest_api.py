@@ -34,7 +34,7 @@ class DataRequest(BaseModel):
     end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
     timebucket: str = Field('5m', description='The time bucket for aggregation')
     agg_function: str = Field('MAX', description='The aggregation function')
-    return_type: str = Field('json', description='The desired return type')
+    return_type: str = Field('json', description='The desired return type', enum=['json', 'fits'])
     columns: List[str] = Field(None, description='List of columns to include in the response')
 
 @app.get("/")
@@ -79,7 +79,7 @@ def get_data(data_request: DataRequest):
 
 def return_fits(df, data_request_dict):
     # Write the table to a FITS file in memory
-    table = Table.from_pandas(df)
+    table = Table.from_pandas(df.dropna(axis=1, how='all'))
     file_like = io.BytesIO()
     hdu = fits.table_to_hdu(table)
     hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
@@ -98,7 +98,7 @@ def return_fits(df, data_request_dict):
             yield chunk
 
     # Define the filename for the download
-    filename = f"{data_request_dict['instrument_name']}_{data_request_dict['start_datetime']}_{data_request_dict['end_datetime']}.fits"
+    filename = f"{data_request_dict['table']}_{data_request_dict['start_datetime']}_{data_request_dict['end_datetime']}.fits"
 
     # Return the FITS file as a downloadable attachment
     return StreamingResponse(
