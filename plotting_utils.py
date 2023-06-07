@@ -4,7 +4,7 @@ import plotly.express as px
 
 
 def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18):
-    fig = px.imshow(df.T)
+    fig = px.imshow(df.T.iloc[::-1])
     fig.update_layout(
         title=f"Spectogram of {instrument_name} from {start_datetime} to {end_datetime}",
         xaxis_title="Datetime",
