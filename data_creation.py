@@ -1,8 +1,8 @@
 # Download all spectograms with burst in the corresponding folder
 import datetime
+import glob
 import logging
 import os
-import glob
 from datetime import datetime
 from multiprocessing.pool import Pool as Pool
 
@@ -14,6 +14,7 @@ LOGGER = logging.getLogger("database_data_addition")
 LOCAL_DATA_FOLDER = os.path.join(os.path.abspath(os.sep), "var", "lib", "ecallisto")
 FILES_LOCAL_PATH = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
 MIN_FILE_SIZE = 2000  # Minimum file size in bytes, to redownload empty files
+
 
 def extract_date_size_from_soup(soup, url):
     """
@@ -31,7 +32,9 @@ def extract_date_size_from_soup(soup, url):
     return None, None
 
 
-def get_paths(start_date, end_date, instrument_regexr_pattern=None, dir=FILES_LOCAL_PATH):
+def get_paths(
+    start_date, end_date, instrument_regexr_pattern=None, dir=FILES_LOCAL_PATH
+):
     """
     Get the local paths of files for a given date range and instrument_regexr_pattern.
 
@@ -52,8 +55,10 @@ def get_paths(start_date, end_date, instrument_regexr_pattern=None, dir=FILES_LO
         The list of paths of files.
     """
     content = {"file_name": [], "path": [], "date": [], "size": [], "date_changed": []}
-    
-    for date in tqdm(pd.date_range(start_date, end_date, inclusive='both'), desc="fetching paths"):
+
+    for date in tqdm(
+        pd.date_range(start_date, end_date, inclusive="both"), desc="fetching paths"
+    ):
         year_path = os.path.join(dir, str(date.year))
         month_path = os.path.join(year_path, str(date.month).zfill(2))
         day_path = os.path.join(month_path, str(date.day).zfill(2))
@@ -90,4 +95,3 @@ def extract_date_from_path(path):
     date = date[-2:]
     date = datetime.strptime("_".join(date), "%Y%m%d_%H%M%S")
     return date
-

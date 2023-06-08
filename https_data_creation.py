@@ -1,7 +1,7 @@
 import datetime
 import logging
-import re
 import os
+import re
 from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
@@ -13,7 +13,9 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 from urllib3.util.retry import Retry
-from data_creation import LOCAL_DATA_FOLDER, MIN_FILE_SIZE, extract_date_from_path
+
+from data_creation import (LOCAL_DATA_FOLDER, MIN_FILE_SIZE,
+                           extract_date_from_path)
 
 LOGGER = logging.getLogger("database_data_addition")
 FILES_BASE_URL = "http://soleil.i4ds.ch/solarradio/data/2002-20yy_Callisto/"
@@ -24,6 +26,7 @@ retry = Retry(connect=3, backoff_factor=0.5)
 adapter = HTTPAdapter(max_retries=retry)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
+
 
 def download_ecallisto_file(URL, return_download_path=False, dir=LOCAL_DATA_FOLDER):
     # Split URL to get the file name and add the directory
@@ -44,6 +47,7 @@ def download_ecallisto_file(URL, return_download_path=False, dir=LOCAL_DATA_FOLD
     # Return path (e.g. for astropy.io.fits.open)
     if return_download_path:
         return file_path
+
 
 def fetch_content(url):
     reqs = session.get(url)
@@ -75,6 +79,7 @@ def extract_fiz_gz_files_urls(
     content["date"] = [extract_date_from_path(url) for url in urls]
     LOGGER.info(f"Extracted {len(urls)} files")
     return content
+
 
 def extract_content(
     url,
@@ -123,10 +128,14 @@ def extract_content(
     for link in soup.find_all("a"):
         href = link.get("href")
         if substring_must_match in href:
-            regex_to_match = re.compile(instrument_regexr_pattern, re.IGNORECASE) if instrument_regexr_pattern is not None else None
+            regex_to_match = (
+                re.compile(instrument_regexr_pattern, re.IGNORECASE)
+                if instrument_regexr_pattern is not None
+                else None
+            )
             if instrument_regexr_pattern is None or re.search(regex_to_match, href):
                 content["file_name"].append(href)
-                if False: #return_date_size: Currently INCREDIBLE SLOW
+                if False:  # return_date_size: Currently INCREDIBLE SLOW
                     date_changed, size = extract_date_size_from_soup(
                         soup, content["file_name"][-1]
                     )
@@ -166,8 +175,7 @@ def extract_fiz_gz_files_urls(
     return content
 
 
-
-def get_urls(start_date, end_date, instrument_regexr_pattern = None) -> list[str]:
+def get_urls(start_date, end_date, instrument_regexr_pattern=None) -> list[str]:
     """
     Get the urls of fiz gz files for a given date range and instrument_glob_pattern.
 
@@ -186,7 +194,9 @@ def get_urls(start_date, end_date, instrument_regexr_pattern = None) -> list[str
         The list of urls of fiz gz files.
     """
     content = {"file_name": [], "path": [], "date": [], "size": [], "date_changed": []}
-    for date in tqdm(pd.date_range(start_date, end_date, inclusive='both'), desc="fetching urls"):
+    for date in tqdm(
+        pd.date_range(start_date, end_date, inclusive="both"), desc="fetching urls"
+    ):
         content_ = extract_fiz_gz_files_urls(
             date.year,
             str(date.month).zfill(2),
@@ -198,7 +208,6 @@ def get_urls(start_date, end_date, instrument_regexr_pattern = None) -> list[str
             content[key].extend(content_[key])
 
     return content
-
 
 
 def download_ecallisto_files(
@@ -265,6 +274,7 @@ def download_ecallisto_files(
     if return_download_paths:
         return r
 
+
 def instrument_name_to_regex_pattern(instrument_name):
     """
     Convert an instrument name to a regex pattern.
@@ -301,4 +311,3 @@ def instrument_name_to_regex_pattern(instrument_name):
         name = instrument_name
     pattern = "(" + name.replace("-", "\-") + pattern + ")"
     return pattern
-

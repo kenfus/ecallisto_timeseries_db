@@ -2,7 +2,7 @@ try:
     import cv2
 except ImportError:
     print("OpenCV is not installed correctly. Please install it to use this module.")
-    cv2=None
+    cv2 = None
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -42,9 +42,7 @@ def spec_to_pd_dataframe(spec, kwargs=None):
     return df
 
 
-def change_resolution_over_freq(
-    spectogram, freq_resolution, interpolation
-):
+def change_resolution_over_freq(spectogram, freq_resolution, interpolation):
     """
     Change the resolution of the spectogram over frequency (y-axis)
     :param spectogram: The spectogram to change the resolution of.
@@ -76,9 +74,7 @@ def change_resolution_over_freq(
     return df
 
 
-def change_resolution_over_time(
-    spectogram, time_resolution, interpolation
-):
+def change_resolution_over_time(spectogram, time_resolution, interpolation):
     """
     Change the resolution of the spectogram over time (x-axis)
     :param spectogram: The spectogram to change the resolution of.

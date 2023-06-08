@@ -24,7 +24,7 @@ def __create_log_path(log_name):
         datetime.now().strftime("%Y-%m-%d"),
         f"{log_name}_{datetime.now().strftime('%H-%M-%S')}.log",
     )
-     
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 
@@ -36,9 +36,9 @@ def setup_custom_logger(name, level=logging.INFO):
     # setup logger with TimedRotatingFileHandler
     handler = logging.handlers.TimedRotatingFileHandler(
         __create_log_path(name),
-        when='midnight',
+        when="midnight",
         backupCount=3,
-        encoding='utf-8',
+        encoding="utf-8",
         delay=False,
         utc=False,
         atTime=datetime.now().time(),
@@ -54,7 +54,6 @@ def setup_custom_logger(name, level=logging.INFO):
     logger.addHandler(consoleHandler)
 
     return logger
-
 
 
 # logger = setup_custom_logger("ecallisto")

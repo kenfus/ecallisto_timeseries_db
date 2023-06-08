@@ -41,7 +41,6 @@ def add_instruments_from_paths_to_database(dict_paths):
                     LOGGER.info(f"Trying next file for {instrument}.")
 
 
-
 def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
     if len(urls) == 0:
         add_data_to_database(urls)
@@ -60,6 +59,7 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
 
     # Clear the cache to avoid memory issues
     clear_download_cache()
+
 
 def add_data_to_database(
     start_date: datetime.date = datetime.now().date() - timedelta(days=7),
@@ -104,9 +104,7 @@ def add_data_to_database(
     >>> main(start_date, days_chunk_size, chunk_size, cpu_count)
     """
     # Create a list of dates to add to the database
-    dates_to_add = pd.date_range(
-        start_date, end_date, freq="D", inclusive="both"
-    )
+    dates_to_add = pd.date_range(start_date, end_date, freq="D", inclusive="both")
     # Reverse the list of dates to add to the database
     dates_to_add = dates_to_add[::-1]
 
@@ -130,10 +128,14 @@ def add_data_to_database(
             add_instruments_from_paths_to_database(dict_paths)
             # Add the dat a to the database
             add_specs_from_paths_to_database(status["path"], chunk_size, cpu_count)
-            LOGGER.info(f"Added data for {date}. {days_added} out of {len(dates_to_add)} done.")
+            LOGGER.info(
+                f"Added data for {date}. {days_added} out of {len(dates_to_add)} done."
+            )
             days_added += 1
         except Exception as e:
-            tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+            tb_str = traceback.format_exception(
+                etype=type(e), value=e, tb=e.__traceback__
+            )
             tb_str = "".join(tb_str)  # Convert list of strings into a single string
             LOGGER.error(f"Error adding data for {date}: {e}\nTraceback:\n{tb_str}")
 

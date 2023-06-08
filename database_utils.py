@@ -8,23 +8,20 @@ import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
 from tqdm import tqdm
 
-from database_functions import (
-    add_new_column_default_value_sql,
-    add_new_column_sql,
-    create_table_datetime_primary_key_sql,
-    create_table_sql,
-    drop_values_between_two_dates_sql,
-    get_column_names_sql,
-    get_daily_rows_for_table_sql,
-    get_distinct_dates_from_table_sql,
-    get_min_max_datetime_from_table_sql,
-    get_table_names_sql,
-    insert_values_sql,
-    table_to_hyper_table,
-    to_float_if_possible,
-)
+from database_functions import (add_new_column_default_value_sql,
+                                add_new_column_sql,
+                                create_table_datetime_primary_key_sql,
+                                create_table_sql,
+                                drop_values_between_two_dates_sql,
+                                get_column_names_sql,
+                                get_daily_rows_for_table_sql,
+                                get_distinct_dates_from_table_sql,
+                                get_min_max_datetime_from_table_sql,
+                                get_table_names_sql, insert_values_sql,
+                                table_to_hyper_table, to_float_if_possible)
 from logging_utils import HiddenPrints
-from spectogram_utils import masked_spectogram_to_array, spec_time_to_pd_datetime
+from spectogram_utils import (masked_spectogram_to_array,
+                              spec_time_to_pd_datetime)
 
 LOGGER = logging.getLogger("database_data_addition")
 
@@ -43,8 +40,8 @@ def get_column_names_clean(
         list: List of column names without "" around the frequencies and trailing zeros.
     """
     column_names = [name.replace('"', "") for name in column_names]
-    # Remove trailing zeros 
-    column_names = [name.rstrip('0').rstrip('.') for name in column_names]  
+    # Remove trailing zeros
+    column_names = [name.rstrip("0").rstrip(".") for name in column_names]
     column_names = [to_float_if_possible(name) for name in column_names]
     column_names = [name for name in column_names if name not in columns_to_drop]
     if len(columns_to_add) > 0:
@@ -59,13 +56,18 @@ def get_daily_rows_for_tables(tables=None):
     df = {}
     for table in tqdm(tables):
         try:
-            df[table] = pd.DataFrame(get_daily_rows_for_table_sql(table), columns=["date", table]).set_index('date')
+            df[table] = pd.DataFrame(
+                get_daily_rows_for_table_sql(table), columns=["date", table]
+            ).set_index("date")
         except:
             pass
 
-    return pd.concat(df.values(), axis=1, join='outer').reset_index()
-    
-def sql_result_to_df(result, datetime_col='datetime', columns: list = None, meta_data: dict = None):
+    return pd.concat(df.values(), axis=1, join="outer").reset_index()
+
+
+def sql_result_to_df(
+    result, datetime_col="datetime", columns: list = None, meta_data: dict = None
+):
     """
     Converts the given result from a sql query to a pandas dataframe
     """
@@ -85,11 +87,15 @@ def sql_result_to_df(result, datetime_col='datetime', columns: list = None, meta
         raise ValueError("datetime_col must be either 'datetime' or 'time'")
     df = df.set_index(datetime_col)
     # make columns prettier if possible by removing trailing 0s.
-    df.columns = [col if col != '0' else '0.' for col in df.columns.astype(str).str.rstrip('0').str.rstrip('.')]
+    df.columns = [
+        col if col != "0" else "0."
+        for col in df.columns.astype(str).str.rstrip("0").str.rstrip(".")
+    ]
     if meta_data:
         for key, value in meta_data.items():
             df.attrs[key] = value
     return df.dropna(how="all", axis=1)
+
 
 def subtract_background_image(df, bg_df):
     """
@@ -278,7 +284,7 @@ def add_spec_from_path_to_database(
     """
     if progress is not None:
         progress.value += 1
-        
+
     with HiddenPrints():  # Hide the download success answer by radiospectra
         spec = CallistoSpectrogram.read(path, cache=True)
 
@@ -318,8 +324,10 @@ def add_spec_from_path_to_database(
     sql_values = np_array_to_postgresql_array_with_datetime_index(date_range, data)
 
     if replace:
-        LOGGER.info(f"Replacing {os.path.basename(path)} in database"
-                    f"dropping data between {date_range[0]} and {date_range[-1]}")
+        LOGGER.info(
+            f"Replacing {os.path.basename(path)} in database"
+            f"dropping data between {date_range[0]} and {date_range[-1]}"
+        )
         drop_values_between_two_dates_sql(
             instrument,
             date_range[0].strftime("%Y-%m-%d %H:%M:%S.%f"),

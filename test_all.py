@@ -5,22 +5,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from data_creation import (
-    check_difference_between_two_reports,
-    download_ecallisto_files,
-    extract_date_from_path,
-    instrument_name_to_regex_pattern,
-)
-from database_utils import (
-    combine_non_unique_frequency_axis_mean,
-    create_dict_of_instrument_paths,
-    extract_instrument_name,
-    extract_separate_instruments,
-    glob_files,
-    np_array_to_postgresql_array,
-    numbers_list_to_postgresql_columns_meta_data,
-    reverse_extract_instrument_name,
-)
+from data_creation import (check_difference_between_two_reports,
+                           download_ecallisto_files, extract_date_from_path,
+                           instrument_name_to_regex_pattern)
+from database_utils import (combine_non_unique_frequency_axis_mean,
+                            create_dict_of_instrument_paths,
+                            extract_instrument_name,
+                            extract_separate_instruments, glob_files,
+                            np_array_to_postgresql_array,
+                            numbers_list_to_postgresql_columns_meta_data,
+                            reverse_extract_instrument_name)
 
 
 @pytest.mark.parametrize(

@@ -1,14 +1,15 @@
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
-from typing import List
-from pydantic import BaseModel
-from database_functions import timebucket_values_from_database_sql, values_from_database_sql
-from database_utils import sql_result_to_df, get_table_names_sql
-from astropy.table import Table
-from astropy.io import fits
 import io
 from typing import List, Optional
+
+from astropy.io import fits
+from astropy.table import Table
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
+
+from database_functions import (timebucket_values_from_database_sql,
+                                values_from_database_sql)
+from database_utils import get_table_names_sql, sql_result_to_df
 
 """
 Start the REST API with:
@@ -25,21 +26,44 @@ app = FastAPI(
     description="REST API for the E-Callisto database",
     version="0.1",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
 )
 
+
 class DataRequest(BaseModel):
-    instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql(), example='austria_unigraz_01')
-    start_datetime: str = Field('2021-03-10 06:30:00', description='The start datetime for the data request')
-    end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
-    timebucket: str = Field(None, description='The time bucket for aggregation', example='1h')
-    agg_function: str = Field(None, description='The aggregation function', enum=["MIN", "MAX", "AVG", "MEDIAN"], example='MAX')
-    return_type: str = Field('json', description='The desired return type', enum=['json', 'fits'])
-    columns: Optional[List[str]] = Field(None, description='List of columns to include in the response', example=None)
+    instrument_name: str = Field(
+        "austria_unigraz_01",
+        description="The name of the instrument",
+        enum=get_table_names_sql(),
+        example="austria_unigraz_01",
+    )
+    start_datetime: str = Field(
+        "2021-03-10 06:30:00", description="The start datetime for the data request"
+    )
+    end_datetime: str = Field(
+        "2021-03-14 23:30:00", description="The end datetime for the data request"
+    )
+    timebucket: str = Field(
+        None, description="The time bucket for aggregation", example="1h"
+    )
+    agg_function: str = Field(
+        None,
+        description="The aggregation function",
+        enum=["MIN", "MAX", "AVG", "MEDIAN"],
+        example="MAX",
+    )
+    return_type: str = Field(
+        "json", description="The desired return type", enum=["json", "fits"]
+    )
+    columns: Optional[List[str]] = Field(
+        None, description="List of columns to include in the response", example=None
+    )
+
 
 @app.get("/api/")
 def root():
     return RedirectResponse(url="/api/redoc")
+
 
 @app.post("/api/data")
 def get_data(data_request: DataRequest):
@@ -62,10 +86,10 @@ def get_data(data_request: DataRequest):
 
     """
     data_request_dict = data_request.dict()
-    data_request_dict['table'] = data_request_dict.pop('instrument_name')
+    data_request_dict["table"] = data_request_dict.pop("instrument_name")
 
     # Get data
-    if not any([data_request_dict['timebucket'], data_request_dict['agg_function']]):
+    if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
         data = values_from_database_sql(**data_request_dict)
     else:
         data = timebucket_values_from_database_sql(**data_request_dict)
@@ -73,16 +97,16 @@ def get_data(data_request: DataRequest):
     # Change data to dataframe
     df = sql_result_to_df(data)
 
-    if data_request_dict['return_type'] == 'json':
+    if data_request_dict["return_type"] == "json":
         return df.to_dict()
-    
-    elif data_request_dict['return_type'] == 'fits':
+
+    elif data_request_dict["return_type"] == "fits":
         return return_fits(df, data_request_dict)
 
 
 def return_fits(df, data_request_dict):
     # Write the table to a FITS file in memory
-    table = Table.from_pandas(df.dropna(axis=1, how='all'))
+    table = Table.from_pandas(df.dropna(axis=1, how="all"))
     file_like = io.BytesIO()
     hdu = fits.table_to_hdu(table)
     hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
@@ -106,6 +130,6 @@ def return_fits(df, data_request_dict):
     # Return the FITS file as a downloadable attachment
     return StreamingResponse(
         iterfile(),
-        media_type='application/octet-stream',
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
