@@ -10,7 +10,7 @@ from astropy.utils.data import clear_download_cache
 from tqdm import tqdm
 
 import logging_utils
-from data_creation import get_urls
+from data_creation import get_paths
 from database_functions import *
 from database_utils import *
 
@@ -109,7 +109,7 @@ def add_data_to_database(
 
     LOGGER.info(f"Found {len(dates_to_add)} days to add to the database.")
     # Add the data to the database
-    days_added = 0
+    days_added = 1
     for date in tqdm(
         dates_to_add,
         total=len(dates_to_add),
@@ -117,16 +117,16 @@ def add_data_to_database(
     ):
         # Get the urls
         try:
-            status = get_urls(
+            status = get_paths(
                 date,
                 date,
             )
             # Check if there are new instruments
-            dict_paths = create_dict_of_instrument_paths(status["url"])
+            dict_paths = create_dict_of_instrument_paths(status["path"])
             # Add the instruments to the database
             add_instruments_from_paths_to_database(dict_paths)
             # Add the dat a to the database
-            add_specs_from_paths_to_database(status["url"], chunk_size, cpu_count)
+            add_specs_from_paths_to_database(status["path"], chunk_size, cpu_count)
             LOGGER.info(f"Added data for {date}. {days_added} out of {len(dates_to_add)} done.")
             days_added += 1
         except Exception as e:
@@ -137,7 +137,7 @@ def add_data_to_database(
 
 if __name__ == "__main__":
     ## Example:
-    # python continiously_add_data_to_database.py --start_date 2021-03-01
+    # python bulk_load_to_database_between_dates.py --start_date 2021-03-01
     # The parameter for the multiprocessing is optimized via cprofiler.
     # Get arguments from command line
     parser = argparse.ArgumentParser()

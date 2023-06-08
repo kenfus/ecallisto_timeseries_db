@@ -7,7 +7,7 @@ from database_utils import sql_result_to_df, get_table_names_sql
 from astropy.table import Table
 from astropy.io import fits
 import io
-from typing import List
+from typing import List, Optional
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 """
@@ -32,12 +32,12 @@ class DataRequest(BaseModel):
     instrument_name: str = Field('austria_unigraz_01', description='The name of the instrument', enum=get_table_names_sql(), example='austria_unigraz_01')
     start_datetime: str = Field('2021-03-10 06:30:00', description='The start datetime for the data request')
     end_datetime: str = Field('2021-03-14 23:30:00', description='The end datetime for the data request')
-    timebucket: str = Field(None, description='The time bucket for aggregation')
-    agg_function: str = Field(None, description='The aggregation function', enum=["MIN", "MAX", "AVG", "MEDIAN"])
+    timebucket: str = Field(None, description='The time bucket for aggregation', example='1h')
+    agg_function: str = Field(None, description='The aggregation function', enum=["MIN", "MAX", "AVG", "MEDIAN"], example='MAX')
     return_type: str = Field('json', description='The desired return type', enum=['json', 'fits'])
-    columns: List[str] = Field(None, description='List of columns to include in the response')
+    columns: Optional[List[str]] = Field(None, description='List of columns to include in the response', example=None)
 
-@app.get("/")
+@app.get("/api/")
 def root():
     return RedirectResponse(url="/api/redoc")
 
