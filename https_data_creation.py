@@ -301,3 +301,4 @@ def instrument_name_to_regex_pattern(instrument_name):
         name = instrument_name
     pattern = "(" + name.replace("-", "\-") + pattern + ")"
     return pattern
+

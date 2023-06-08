@@ -43,17 +43,20 @@ def add_instruments_from_paths_to_database(dict_paths):
 
 
 def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
-    partial_f = partial(add_spec_from_path_to_database, replace=replace)
-    with mp.Pool(cpu_count) as pool:
-        pool.map_async(
-            partial_f,
-            urls,
-            chunksize=chunk_size,
-        )
+    if len(urls) == 0:
+        add_data_to_database(urls)
+    else:
+        partial_f = partial(add_spec_from_path_to_database, replace=replace)
+        with mp.Pool(cpu_count) as pool:
+            pool.map_async(
+                partial_f,
+                urls,
+                chunksize=chunk_size,
+            )
 
-        # Wait for all tasks to complete
-        pool.close()
-        pool.join()
+            # Wait for all tasks to complete
+            pool.close()
+            pool.join()
 
     # Clear the cache to avoid memory issues
     clear_download_cache()

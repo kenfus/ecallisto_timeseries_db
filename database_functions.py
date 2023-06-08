@@ -482,8 +482,9 @@ def drop_values_between_two_dates_sql(table_name, start_time, end_time):
         cursor = conn.cursor()
         cursor.execute(
             f"""DELETE FROM {table_name}
-                       WHERE datetime BETWEEN '{start_time}' AND '{end_time}';
-                       """
+                       WHERE datetime BETWEEN %s AND %s;
+                       """,
+            (start_time, end_time)
         )
         conn.commit()
         cursor.close()

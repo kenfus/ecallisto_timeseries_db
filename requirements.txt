@@ -11,5 +11,6 @@ pyarrow
 fastapi
 uvicorn
 schedule
+watchdog
 # conda install -c pyviz holoviews
 # conda install -c plotly plotly=5.13.0

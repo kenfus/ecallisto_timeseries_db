@@ -316,7 +316,10 @@ def add_spec_from_path_to_database(
         data = np.clip(data, a_min=0, a_max=32767)
     date_range = spec_time_to_pd_datetime(spec)
     sql_values = np_array_to_postgresql_array_with_datetime_index(date_range, data)
+
     if replace:
+        LOGGER.info(f"Replacing {os.path.basename(path)} in database"
+                    f"dropping data between {date_range[0]} and {date_range[-1]}")
         drop_values_between_two_dates_sql(
             instrument,
             date_range[0].strftime("%Y-%m-%d %H:%M:%S.%f"),
