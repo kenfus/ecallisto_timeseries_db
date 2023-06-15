@@ -38,7 +38,7 @@ def create_observer_for_day(date, event_handler):
         return None
     LOGGER.info(f"Creating observer for {path}.")
     observer = Observer()
-    observer.schedule(event_handler, path=path, recursive=True)
+    observer.schedule(event_handler, path=path, recursive=False)
     observer.start()
     return observer
 
@@ -55,13 +55,15 @@ def get_file_path(event):
 
 
 class Handler(FileSystemEventHandler):
+    def on_any_event(self, event):
+        print(event)
     def on_modified(self, event):
         path = get_file_path(event)
         if path and path.endswith(".fit.gz"):
             LOGGER.info(f"Detected modifcation of {path}.")
             add_data_to_database(path, replace=True)
 
-    def on_created(self, event):
+    def on_moved(self, event):
         path = get_file_path(event)
         if path and path.endswith(".fit.gz"):
             LOGGER.info(f"Detected creation of {path}.")
@@ -100,7 +102,7 @@ def observe_days(days_to_observe):
                 or now.day > current_date.day
             ):
                 # Create new observer
-                observer = create_observer_for_day(current_date, event_handler)
+                observer = create_observer_for_day(now, event_handler)
                 if observer == None:
                     continue
                 observers.append(observer)
@@ -108,7 +110,7 @@ def observe_days(days_to_observe):
                     f"New day has started. Stopping observers and creating new observers for {now.year}-{now.month}."
                 )
                 LOGGER.info(
-                    f"Created new observer for {current_date}. There are now {len(observers)} observers running."
+                    f"Created new observer for {now}. There are now {len(observers)} observers running."
                 )
                 # Stop the observers
                 observers.pop(0).stop()
@@ -124,5 +126,5 @@ def observe_days(days_to_observe):
 
 
 if __name__ == "__main__":
-    DAYS_TO_CHECK = 30
+    DAYS_TO_CHECK = 1
     observe_days(DAYS_TO_CHECK)
