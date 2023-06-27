@@ -2,8 +2,8 @@ import dash
 from dash.dependencies import Input, Output, State
 from dash import dcc, html
 import plotly.express as px
-from database_functions import timebucket_values_from_database_sql, values_from_database_sql, sql_result_to_df, fill_missing_timesteps_with_nan
-from plotting_utils import calculate_timedelta_from_strings, timedelta_to_sql
+from database_functions import timebucket_values_from_database_sql, sql_result_to_df, fill_missing_timesteps_with_nan
+from plotting_utils import timedelta_to_sql
 import pandas as pd
 
 app = dash.Dash(__name__)
@@ -12,7 +12,7 @@ app = dash.Dash(__name__)
 RESOLUTION_WIDTH = 720
 query = {
     "table": "austria_unigraz_01",
-    "start_datetime": '2021-03-01 06:30:00',
+    "start_datetime": '2021-03-01 04:30:00',
     "end_datetime": '2021-03-14 23:30:00',
     "timebucket": "1h",
     "agg_function": "MAX"
