@@ -8,8 +8,8 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from database_functions import (timebucket_values_from_database_sql,
-                                values_from_database_sql)
-from database_utils import get_table_names_sql, sql_result_to_df
+                                values_from_database_sql, sql_result_to_df)
+from database_utils import get_table_names_sql
 
 """
 Start the REST API with:

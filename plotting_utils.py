@@ -1,7 +1,6 @@
 from datetime import timedelta
-
+import pandas as pd
 import plotly.express as px
-
 
 def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18):
     fig = px.imshow(df.T.iloc[::-1])
@@ -49,28 +48,26 @@ def plot_spectogram_with_burst(
 
     return fig
 
+def calculate_timedelta_from_strings(start, end):
+    start = pd.to_datetime(start)
+    end = pd.to_datetime(end)
+    return end - start
 
-def plot_spectogram_with_bursts(
-    df, instrument_name, start_datetime, end_datetime, bursts, burst_types=None, size=18
-):
-    fig = plot_spectogram(df, instrument_name, start_datetime, end_datetime, size)
-    if burst_types is None:
-        bursts = bursts[bursts["burst_type"] != 0].copy()
+def timedelta_to_sql(timedelta):
+    # Convert to seconds
+    seconds = timedelta.total_seconds()
+
+    # Convert to SQL-compatible value
+    if seconds >= 86400:  # More than 1 day
+        days = seconds / 86400
+        sql_value = f"{int(days)} d" if days.is_integer() else f"{days:.1f} d"
+    elif seconds >= 3600:  # More than 1 hour
+        hours = seconds / 3600
+        sql_value = f"{int(hours)} h" if hours.is_integer() else f"{hours:.1f} h"
+    elif seconds >= 60:  # More than 1 minute
+        minutes = seconds / 60
+        sql_value = f"{int(minutes)} min" if minutes.is_integer() else f"{minutes:.1f} min"
     else:
-        bursts = bursts[bursts["burst_type"].isin(burst_types)].copy()
-    bursts["burst_id"] = (burst_list["burst_type"].diff() != 0).cumsum()
-    bursts.reset_index(inplace=True)
-    bursts = bursts.groupby("burst_id").agg(
-        {"burst_type": "first", "datetime": ["min", "max"]}
-    )
-    median_time_delta = np.median(np.diff(df.index))
-    for index, row in bursts.iterrows():
-        fig = add_burst_to_spectogram(
-            fig,
-            row["datetime"]["min"],
-            row["datetime"]["max"] + median_time_delta,
-            type=row["burst_type"]["first"],
-            size=size,
-        )
+        sql_value = f"{seconds:.1f} s"
 
-    return fig
+    return sql_value

@@ -3,8 +3,12 @@ import re
 from datetime import datetime
 from typing import List
 
+import psycopg2
+
 import pandas as pd
 import psycopg2
+import numpy as np
+from dateutil.parser import parse
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
@@ -21,6 +25,120 @@ if "PGDATABASE" not in os.environ:
 ##
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
 
+
+def fill_missing_timesteps_with_nan(df):
+    """
+    Fill missing timesteps in a pandas DataFrame with NaN values.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The DataFrame to fill missing timesteps in.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A new DataFrame with missing timesteps filled with NaN values.
+
+    Notes
+    -----
+    This function is useful when working with time-series data that has missing timesteps.
+    By filling the missing timesteps with NaN values, the DataFrame can be easily visualized
+    or analyzed without introducing errors due to missing data.
+
+    The function calculates the median time delta of the input DataFrame, and then creates
+    a new index with evenly spaced values based on that delta. It then uses the pandas
+    `reindex` function to fill in missing timesteps with NaN values.
+
+    Examples
+    --------
+    >>> dates = pd.date_range('2023-02-19 01:00', '2023-02-19 05:00', freq='2H')
+    >>> freqs = ['10M', '20M', '30M']
+    >>> data = np.random.randn(len(dates), len(freqs))
+    >>> df = pd.DataFrame(data, index=dates, columns=freqs)
+    >>> df = fill_missing_timesteps_with_nan(df)
+    >>> print(df)
+
+                            10M       20M       30M
+    2023-02-19 01:00:00 -0.349636  0.004947  0.546848
+    2023-02-19 03:00:00       NaN       NaN       NaN
+    2023-02-19 05:00:00 -0.576182  1.222293 -0.416526
+    """
+    # Change index to datetime, if it's not already
+    df.index = pd.to_datetime(df.index)
+    time_delta = np.median(np.diff(df.index.values))
+    time_delta = pd.Timedelta(time_delta)
+    new_index = pd.date_range(df.index[0], df.index[-1], freq=time_delta)
+    df = df.reindex(new_index)
+    return df
+
+def get_column_names_clean(
+    column_names, columns_to_drop=["burst_type"], columns_to_add=[]
+):
+    """Get the column names of a table in the database.
+
+    Args:
+        column_names (list): List of column names to clean.
+        columns_to_drop (list): List of column names to drop.
+        columns_to_add (list): List of column names to add at the beginning.
+
+    Returns:
+        list: List of column names without "" around the frequencies and trailing zeros.
+    """
+    column_names = [name.replace('"', "") for name in column_names]
+    # Remove trailing zeros
+    column_names = [name.rstrip("0").rstrip(".") for name in column_names]
+    column_names = [to_float_if_possible(name) for name in column_names]
+    column_names = [name for name in column_names if name not in columns_to_drop]
+    if len(columns_to_add) > 0:
+        for column in columns_to_add:
+            column_names.insert(0, column)
+    return column_names
+
+def sql_result_to_df(
+    result, datetime_col="datetime", columns: list = None, meta_data: dict = None
+):
+    """
+    Converts the given result from a sql query to a pandas dataframe
+    """
+    if columns is None:
+        if isinstance(result[0], dict):
+            columns = list(result[0].keys())
+            columns = get_column_names_clean(columns)
+        else:
+            columns = [f"column_{i}" for i in range(len(result[0]))]
+    df = pd.DataFrame(result)
+    df.columns = columns
+    if datetime_col == "datetime":
+        df["datetime"] = pd.to_datetime(df["datetime"])
+    elif datetime_col == "time":
+        pass
+    else:
+        raise ValueError("datetime_col must be either 'datetime' or 'time'")
+    df = df.set_index(datetime_col)
+    # make columns prettier if possible by removing trailing 0s.
+    df.columns = [
+        col if col != "0" else "0."
+        for col in df.columns.astype(str).str.rstrip("0").str.rstrip(".")
+    ]
+    if meta_data:
+        for key, value in meta_data.items():
+            df.attrs[key] = value
+    return df.dropna(how="all", axis=1)
+
+
+def subtract_background_image(df, bg_df):
+    """
+    Subtract background image from dataframe
+    :param df: dataframe
+    :param bg_df: background dataframe
+    :return: dataframe with background image subtracted
+    """
+    df = df.copy()
+    bg_df = bg_df.copy()
+    for index, row in bg_df.iterrows():
+        df[df.index.hour == index] = df[df.index.hour == index] - row
+    return df
 
 def create_continuous_aggregate_view_no_refresh(table_name):
     view_name = f"{table_name}_daily_row_count"
@@ -352,20 +470,15 @@ def values_from_database_sql(
         raise TypeError("'columns' should be a list of str")
 
     # Check date
-    datetime_format = "%Y-%m-%d %H:%M:%S"
     try:
-        datetime.strptime(start_datetime, datetime_format)
-    except ValueError:
-        raise ValueError(
-            "start_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'"
-        )
-
+        parse(start_datetime)
+    except ValueError as e:
+        raise ValueError(f"start_datetime error: {e}")
+    
     try:
-        datetime.strptime(end_datetime, datetime_format)
-    except ValueError:
-        raise ValueError(
-            "end_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'"
-        )
+        parse(end_datetime)
+    except ValueError as e:
+        raise ValueError(f"start_datetime error: {e}")
 
     if not isinstance(columns_not_to_select, list) or not all(
         isinstance(column, str) for column in columns_not_to_select
@@ -413,20 +526,15 @@ def timebucket_values_from_database_sql(
         raise TypeError("'columns' should be a list of str")
 
     # Check date
-    datetime_format = "%Y-%m-%d %H:%M:%S"
     try:
-        datetime.strptime(start_datetime, datetime_format)
-    except ValueError:
-        raise ValueError(
-            "start_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'"
-        )
-
+        parse(start_datetime)
+    except ValueError as e:
+        raise ValueError(f"start_datetime error: {e}")
+    
     try:
-        datetime.strptime(end_datetime, datetime_format)
-    except ValueError:
-        raise ValueError(
-            "end_datetime should be a string in the format 'YYYY-MM-DD HH:MM:SS'"
-        )
+        parse(end_datetime)
+    except ValueError as e:
+        raise ValueError(f"start_datetime error: {e}")
 
     pattern = r"^\d+(\.\d+)?\D+$"
     if not re.match(pattern, timebucket):
@@ -654,12 +762,6 @@ def sql_background_image_to_df(result, columns=None, meta_data: dict = None):
         for key, value in meta_data.items():
             df.attrs[key] = value
     return df
-
-
-from typing import List
-
-import psycopg2
-
 
 def get_spectogram_background_image_sql(
     table: str,
