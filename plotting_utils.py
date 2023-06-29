@@ -53,7 +53,7 @@ def calculate_timedelta_from_strings(start, end):
     end = pd.to_datetime(end)
     return end - start
 
-def timedelta_to_sql(timedelta):
+def timedelta_to_sql_timebucket_value(timedelta):
     # Convert to seconds
     seconds = timedelta.total_seconds()
 
