@@ -89,7 +89,7 @@ def update_graph(n_clicks, rangeselector, zoom_clicks, instrument, start_date, e
     df = fill_missing_timesteps_with_nan(df)
 
     # Create figure
-    fig = px.imshow(df.T.iloc[::-1])
+    fig = px.imshow(df.T)
     zoom_history = zoom_history or []
     zoom_history.append(fig)
 
