@@ -1,6 +1,8 @@
 from datetime import timedelta
+
 import pandas as pd
 import plotly.express as px
+
 
 def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18):
     fig = px.imshow(df.T.iloc[::-1])

@@ -3,11 +3,13 @@ import re
 from datetime import datetime
 from typing import List
 
-import psycopg2
-
-import pandas as pd
-import psycopg2
 import numpy as np
+import pandas as pd
+
+try:
+    import psycopg2
+except ImportError:
+    print("psycopg2 not installed, DB functions will not work (which can be ok).")
 from dateutil.parser import parse
 
 # Create variables for the connection to the OS

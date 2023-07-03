@@ -70,3 +70,6 @@ main(start_date, instrument_substring, days_chunk_size, chunk_size, cpu_count)
 
 ### Continously Add Data to Database
 This function is also found in the file `continiously_add_data_to_database.py`. It is called `continiously_add_data_to_database` and is described below.
+
+### Rest API
+An example to use the database with a REST API can be found in the file `plotting_from_rest_api.ipynb`. Requirements are defined in `requirements_rest_api.txt`.
