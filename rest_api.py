@@ -1,14 +1,21 @@
+import asyncio
 import io
+import json
+import os
+import uuid
 from typing import List, Optional
 
 from astropy.io import fits
 from astropy.table import Table
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from database_functions import (timebucket_values_from_database_sql,
-                                values_from_database_sql, sql_result_to_df)
+from database_functions import (
+    sql_result_to_df,
+    timebucket_values_from_database_sql,
+    values_from_database_sql,
+)
 from database_utils import get_table_names_sql
 
 """
@@ -60,76 +67,58 @@ class DataRequest(BaseModel):
     )
 
 
-@app.get("/api/")
-def root():
-    return RedirectResponse(url="/api/redoc")
-
-
+# Add the BackgroundTasks parameter to your function
 @app.post("/api/data")
-def get_data(data_request: DataRequest):
-    """
-    Retrieve data based on the provided data request.
-
-    This route retrieves data from the E-Callisto database based on the specified parameters in the data request.
-
-    - `instrument_name`: The name of the instrument.
-    - `start_datetime`: The start datetime for the data request.
-    - `end_datetime`: The end datetime for the data request.
-    - `timebucket`: The time bucket for aggregation.
-    - `agg_function`: The aggregation function.
-    - `return_type`: The desired return type.
-    - `columns`: List of columns to include in the response.
-
-    Returns:
-        - If `return_type` is 'json': The data as a JSON object.
-        - If `return_type` is 'fits': The data as a downloadable FITS file.
-
-    """
+async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
     data_request_dict = data_request.dict()
     data_request_dict["table"] = data_request_dict.pop("instrument_name")
 
-    # Get data
+    # Create a unique ID for this request and generate a filename based on this
+    file_id = str(uuid.uuid4())
+    file_path_json = f"data/{file_id}.json"
+    file_path_fits = f"data/{file_id}.fits"
+
+    # Add a task to run in the background that will get the data and save it to a file
+    background_tasks.add_task(get_and_save_data, data_request_dict, file_path_json, file_path_fits)
+
+    # Return the URLs where the files will be available once the data has been fetched
+    return {"json_url": f"/api/data/{file_id}.json", "fits_url": f"/api/data/{file_id}.fits"}
+
+
+async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
-        data = values_from_database_sql(**data_request_dict)
+        data = await values_from_database_sql(**data_request_dict)
     else:
-        data = timebucket_values_from_database_sql(**data_request_dict)
+        data = await timebucket_values_from_database_sql(**data_request_dict)
 
     # Change data to dataframe
     df = sql_result_to_df(data)
 
-    if data_request_dict["return_type"] == "json":
-        return df.to_dict()
+    # Save as JSON
+    df.to_json(file_path_json)
 
-    elif data_request_dict["return_type"] == "fits":
-        return return_fits(df, data_request_dict)
-
-
-def return_fits(df, data_request_dict):
-    # Write the table to a FITS file in memory
+    # Save as FITS
     table = Table.from_pandas(df.dropna(axis=1, how="all"))
-    file_like = io.BytesIO()
     hdu = fits.table_to_hdu(table)
     hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
-    hdul.writeto(file_like)
+    hdul.writeto(file_path_fits)
 
-    # Move the cursor to the start of the BytesIO object
-    file_like.seek(0)
 
-    # Define a generator that yields file data in chunks
-    def iterfile():
-        chunk_size = 8192
-        while True:
-            chunk = file_like.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
+@app.get("/api/data/{file_id}.json")
+async def get_json(file_id: str):
+    file_path = f"data/{file_id}.json"
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            return json.load(file)
+    else:
+        return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
 
-    # Define the filename for the download
-    filename = f"{data_request_dict['table']}_{data_request_dict['start_datetime']}_{data_request_dict['end_datetime']}.fits"
 
-    # Return the FITS file as a downloadable attachment
-    return StreamingResponse(
-        iterfile(),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+@app.get("/api/data/{file_id}.fits")
+async def get_fits(file_id: str):
+    file_path = f"data/{file_id}.fits"
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as file:
+            return StreamingResponse(file, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_id}.fits"'})
+    else:
+        return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
