@@ -84,12 +84,15 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
     # Return the URLs where the files will be available once the data has been fetched
     return {"json_url": f"/api/data/{file_id}.json", "fits_url": f"/api/data/{file_id}.fits"}
 
-
 async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
-        data = await values_from_database_sql(**data_request_dict)
+        data = values_from_database_sql(**data_request_dict)
     else:
-        data = await timebucket_values_from_database_sql(**data_request_dict)
+        data = timebucket_values_from_database_sql(**data_request_dict)
+
+    # Create dir 
+    os.makedirs(os.path.dirname(file_path_json), exist_ok=True)
+    os.makedirs(os.path.dirname(file_path_fits), exist_ok=True)
 
     # Change data to dataframe
     df = sql_result_to_df(data)

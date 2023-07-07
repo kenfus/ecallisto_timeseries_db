@@ -8,3 +8,4 @@ test_data/**/*.fit.gz
 test_data/**.txt
 added_data_log/urls.parquet
 logs/**/*.log.*
+data/*
