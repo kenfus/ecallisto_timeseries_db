@@ -10,7 +10,7 @@ from astropy.utils.data import clear_download_cache
 from tqdm import tqdm
 
 import logging_utils
-from data_creation import get_paths
+from data_creation_utils import get_paths
 from database_functions import *
 from database_utils import *
 

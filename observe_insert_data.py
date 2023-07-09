@@ -9,7 +9,7 @@ from watchdog.observers import Observer
 from bulk_load_to_database_between_dates import (
     add_instruments_from_paths_to_database, add_specs_from_paths_to_database,
     create_dict_of_instrument_paths)
-from data_creation import FILES_LOCAL_PATH
+from data_creation_utils import FILES_LOCAL_PATH
 from logging_utils import setup_custom_logger
 
 LOGGER = setup_custom_logger("add_new_files_to_db")

@@ -1,4 +1,3 @@
-# Download all spectograms with burst in the corresponding folder
 import datetime
 import glob
 import logging
@@ -14,23 +13,6 @@ LOGGER = logging.getLogger("database_data_addition")
 LOCAL_DATA_FOLDER = os.path.join(os.path.abspath(os.sep), "var", "lib", "ecallisto")
 FILES_LOCAL_PATH = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
 MIN_FILE_SIZE = 2000  # Minimum file size in bytes, to redownload empty files
-
-
-def extract_date_size_from_soup(soup, url):
-    """
-    Extracts the date and size of the file from the soup object
-    """
-    link_element = soup.find("a", href=url)
-    if link_element:
-        parent_td = link_element.parent.find_next_sibling("td")
-        if parent_td:
-            date = parent_td.text
-            size_td = parent_td.find_next_sibling("td")
-            if size_td:
-                size = size_td.text
-                return date, size
-    return None, None
-
 
 def get_paths(
     start_date, end_date, instrument_regexr_pattern=None, dir=FILES_LOCAL_PATH
