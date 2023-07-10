@@ -41,7 +41,7 @@ def add_instruments_from_paths_to_database(dict_paths):
                     LOGGER.info(f"Trying next file for {instrument}.")
 
 
-def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
+def add_specs_from_paths_to_database(urls, chunk_size=100, cpu_count=os.cpu_count(), replace=False):
     partial_f = partial(add_spec_from_path_to_database, replace=replace)
     with mp.Pool(cpu_count) as pool:
         pool.map_async(

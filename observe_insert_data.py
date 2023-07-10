@@ -27,7 +27,8 @@ def get_dirs_to_monitor(base_path, days_to_check):
         for i in range(days_to_check):
             day_ago = datetime.now() - timedelta(days=i)
             date_path = day_ago.strftime('%Y/%m/%d')
-            dirs_to_monitor.append(f"{base_path}{date_path}/")
+            # Append to the beginning of list
+            dirs_to_monitor.insert(0, f"{base_path}{date_path}/")
 
         LOGGER.info(f"Monitoring {len(dirs_to_monitor)} directories.")
         LOGGER.info(f"First and last directory to monitor: {dirs_to_monitor[0]} and {dirs_to_monitor[-1]}.")
@@ -55,19 +56,25 @@ def monitor_directories(base_path, days_to_check):
                 new_day_dir = f"{base_path}{new_day.strftime('%Y/%m/%d')}/"
                 LOGGER.info(f"Adding {new_day_dir} to prev_state")
 
-                if oldest_dir in prev_state:
-                    del prev_state[oldest_dir]
+                del prev_state[oldest_dir]
+                dirs_to_monitor.remove(oldest_dir)
+                dirs_to_monitor.append(new_day_dir)
                 
                 prev_state[new_day_dir] = get_files_with_timestamps(new_day_dir)
 
-            LOGGER.info(f"Checking {len(prev_state)} folders with {sum([len(prev_state[dir]) for dir in prev_state])} files...")
+            LOGGER.info(f"Example previous: {list(prev_state.keys())[-1]} has {len(list(prev_state.values())[0])} files.")
 
             curr_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor if dir in prev_state}
+            LOGGER.info(f"Example current: {list(curr_state.keys())[-1]} has {len(list(curr_state.values())[0])} files.")
+
+            added = []
+            removed = []
+            modified = []
 
             for dir in dirs_to_monitor:
-                added = [f for f in curr_state[dir] if f not in prev_state[dir]]
-                removed = [f for f in prev_state[dir] if f not in curr_state[dir]]
-                modified = [f for f in curr_state[dir] if f in prev_state[dir] and curr_state[dir][f] != prev_state[dir][f]]
+                added += [f for f in curr_state[dir] if f not in prev_state[dir]]
+                removed += [f for f in prev_state[dir] if f not in curr_state[dir]]
+                modified += [f for f in curr_state[dir] if f in prev_state[dir] and curr_state[dir][f] != prev_state[dir][f]]
 
             if added:
                 added_examples = ', '.join(added[:3]) + ('...' if len(added) > 3 else '')
@@ -79,11 +86,11 @@ def monitor_directories(base_path, days_to_check):
                 modified_examples = ', '.join(modified[:3]) + ('...' if len(modified) > 3 else '')
                 LOGGER.info(f"In {dir} - Modified ({len(modified)}): {modified_examples}")
 
-                to_add = added + modified
-                if to_add:
-                    LOGGER.info(f"Adding {len(to_add)} files to the database...")
-                    add_specs_from_paths_to_database(to_add)
-                    LOGGER.info(f"Done adding {len(to_add)} files to the database.")
+            to_add = added + modified
+            if to_add:
+                LOGGER.info(f"Adding {len(to_add)} files to the database...")
+                add_specs_from_paths_to_database(to_add)
+                LOGGER.info(f"Done adding {len(to_add)} files to the database.")
 
             prev_state = curr_state
             time.sleep(3*60)
