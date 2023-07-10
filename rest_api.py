@@ -1,14 +1,13 @@
-import asyncio
-import io
 import json
 import os
-import uuid
+import time
+import hashlib
 from typing import List, Optional
 
 from astropy.io import fits
 from astropy.table import Table
 from fastapi import BackgroundTasks, FastAPI
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from database_functions import (
@@ -17,6 +16,8 @@ from database_functions import (
     values_from_database_sql,
 )
 from database_utils import get_table_names_sql
+import logging_utils
+LOGGER = logging_utils.setup_custom_logger("rest_api")
 
 """
 Start the REST API with:
@@ -73,13 +74,20 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
     data_request_dict = data_request.dict()
     data_request_dict["table"] = data_request_dict.pop("instrument_name")
 
+    LOGGER.info(f"Received data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
     # Create a unique ID for this request and generate a filename based on this
-    file_id = str(uuid.uuid4())
+    file_id = get_sha256_from_dict(data_request_dict)
     file_path_json = f"data/{file_id}.json"
     file_path_fits = f"data/{file_id}.fits"
 
-    # Add a task to run in the background that will get the data and save it to a file
-    background_tasks.add_task(get_and_save_data, data_request_dict, file_path_json, file_path_fits)
+    # Check if the file already exists
+    if os.path.exists(file_path_json) and os.path.exists(file_path_fits):
+        LOGGER.info(f"Data request: {data_request_dict} already exists at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    else:
+        LOGGER.info(f"Data request: {data_request_dict} is new at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        # Add a task to run in the background that will get the data and save it to a file
+        background_tasks.add_task(get_and_save_data, data_request_dict, file_path_json, file_path_fits)
 
     # Return the URLs where the files will be available once the data has been fetched
     return {"json_url": f"/api/data/{file_id}.json", "fits_url": f"/api/data/{file_id}.fits"}
@@ -90,6 +98,9 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     else:
         data = timebucket_values_from_database_sql(**data_request_dict)
 
+    # Logg
+    LOGGER.info(f"Finished data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
     # Create dir 
     os.makedirs(os.path.dirname(file_path_json), exist_ok=True)
     os.makedirs(os.path.dirname(file_path_fits), exist_ok=True)
@@ -98,7 +109,7 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     df = sql_result_to_df(data)
 
     # Save as JSON
-    df.to_json(file_path_json)
+    df.to_json(file_path_json, date_format="iso", orient="columns")
 
     # Save as FITS
     table = Table.from_pandas(df.dropna(axis=1, how="all"))
@@ -110,6 +121,7 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
 @app.get("/api/data/{file_id}.json")
 async def get_json(file_id: str):
     file_path = f"data/{file_id}.json"
+    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
             return json.load(file)
@@ -120,8 +132,14 @@ async def get_json(file_id: str):
 @app.get("/api/data/{file_id}.fits")
 async def get_fits(file_id: str):
     file_path = f"data/{file_id}.fits"
+    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
         with open(file_path, "rb") as file:
             return StreamingResponse(file, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_id}.fits"'})
     else:
         return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
+    
+def get_sha256_from_dict(data: dict) -> str:
+    """Generates a SHA256 hash from a dictionary."""
+    data_string = json.dumps(data, sort_keys=True)  # we use sort_keys to ensure consistent ordering
+    return hashlib.sha256(data_string.encode()).hexdigest()
