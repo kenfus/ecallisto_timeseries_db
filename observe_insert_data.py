@@ -1,130 +1,101 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging_utils 
+from bulk_load_to_database_between_dates import add_specs_from_paths_to_database
 
-import pandas as pd
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+LOGGER = logging_utils.setup_custom_logger("observe_insert_data_tsdb")
 
-from bulk_load_to_database_between_dates import (
-    add_instruments_from_paths_to_database, add_specs_from_paths_to_database,
-    create_dict_of_instrument_paths)
-from data_creation_utils import FILES_LOCAL_PATH
-from logging_utils import setup_custom_logger
-
-LOGGER = setup_custom_logger("add_new_files_to_db")
-
-
-def add_data_to_database(path, replace):
-    LOGGER.info(f"Adding data from {path} to database.")
-    # To list
-    path = [path]
-    # Check if there are new instruments
-    dict_paths = create_dict_of_instrument_paths(path)
-    # Add the instruments to the database
-    add_instruments_from_paths_to_database(dict_paths)
-    # Add the dat a to the database
-    add_specs_from_paths_to_database(path, 1, 1, replace=replace)
-
-
-def create_observer_for_day(date, event_handler):
-    path = os.path.join(
-        FILES_LOCAL_PATH,
-        str(date.year),
-        str(date.month).zfill(2),
-        str(date.day).zfill(2),
-    )
-    if not os.path.exists(path):
-        return None
-    LOGGER.info(f"Creating observer for {path}.")
-    observer = Observer()
-    observer.schedule(event_handler, path=path, recursive=False)
-    observer.start()
-    return observer
-
-
-def get_file_path(event):
-    if event.is_directory:
-        return None  # Ignore directory modifications
-
-    file_path = event.src_path
-    if event.event_type == "moved":
-        file_path = event.dest_path  # Use the destination path if it was a move event
-
-    return file_path
-
-
-class Handler(FileSystemEventHandler):
-    def on_any_event(self, event):
-        print(event)
-    def on_modified(self, event):
-        path = get_file_path(event)
-        if path and path.endswith(".fit.gz"):
-            LOGGER.info(f"Detected modifcation of {path}.")
-            add_data_to_database(path, replace=True)
-
-    def on_moved(self, event):
-        path = get_file_path(event)
-        if path and path.endswith(".fit.gz"):
-            LOGGER.info(f"Detected creation of {path}.")
-            add_data_to_database(path, replace=False)
-
-
-def observe_days(days_to_observe):
-    ###
-    date_range = pd.date_range(
-        pd.Timestamp.now() - pd.DateOffset(days=days_to_observe),
-        pd.Timestamp.now(),
-        freq="D",
-    )
-    LOGGER.info(
-        f"Checking for new data in the last {days_to_observe} days. First day: {date_range[0].date()}, last day: {date_range[-1].date()}."
-    )
-    LOGGER.info(
-        f"Will start observing {len(date_range)} days and thus starting {len(date_range)} observers."
-    )
-    # Observers
-    observers = []
-    event_handler = Handler()
-    # Create current year and months to check
-    current_date = datetime.now().date()
+def get_files_with_timestamps(path):
     try:
-        for date in date_range:
-            observer = create_observer_for_day(date, event_handler)
-            observers.append(observer)
+        files_with_timestamps = {}
+        if os.path.exists(path):  # Check if the path exists
+            for dirpath, _, filenames in os.walk(path):
+                for file in filenames:
+                    full_path = os.path.join(dirpath, file)
+                    files_with_timestamps[full_path] = os.path.getmtime(full_path)
+        else:
+            LOGGER.error(f"Path {path} does not exist (yet?).")
+        return files_with_timestamps
+    except Exception as e:
+        LOGGER.error(f"Error during fetching timestamps: {str(e)}")
+        return {}
 
+def get_dirs_to_monitor(base_path, days_to_check):
+    dirs_to_monitor = []
+    try:
+        for i in range(days_to_check):
+            day_ago = datetime.now() - timedelta(days=i)
+            date_path = day_ago.strftime('%Y/%m/%d')
+            dirs_to_monitor.append(f"{base_path}{date_path}/")
+
+        LOGGER.info(f"Monitoring {len(dirs_to_monitor)} directories.")
+        LOGGER.info(f"First and last directory to monitor: {dirs_to_monitor[0]} and {dirs_to_monitor[-1]}.")
+        return dirs_to_monitor
+    except Exception as e:
+        LOGGER.error(f"Error during fetching directories to monitor: {str(e)}")
+        return []
+
+def monitor_directories(base_path, days_to_check):
+    dirs_to_monitor = get_dirs_to_monitor(base_path, days_to_check)
+    prev_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor}
+    current_day = datetime.now().date()
+
+    try:
         while True:
-            time.sleep(1)
-            now = datetime.now()
-            if (
-                now.month > current_date.month
-                or now.year > current_date.year
-                or now.day > current_date.day
-            ):
-                # Create new observer
-                observer = create_observer_for_day(now, event_handler)
-                if observer == None:
-                    continue
-                observers.append(observer)
-                LOGGER.info(
-                    f"New day has started. Stopping observers and creating new observers for {now.year}-{now.month}."
-                )
-                LOGGER.info(
-                    f"Created new observer for {now}. There are now {len(observers)} observers running."
-                )
-                # Stop the observers
-                observers.pop(0).stop()
-                # New day has started
-                current_date = now.date()
+            new_day = datetime.now().date()
+            if new_day != current_day:
+                LOGGER.info(f"New day! {new_day}")
+                current_day = new_day
+                
+                oldest_day = (datetime.now() - timedelta(days=days_to_check)).strftime('%Y/%m/%d')
+                oldest_dir = f"{base_path}{oldest_day}/"
+                LOGGER.info(f"Removing {oldest_dir} from prev_state")
+
+                new_day_dir = f"{base_path}{new_day.strftime('%Y/%m/%d')}/"
+                LOGGER.info(f"Adding {new_day_dir} to prev_state")
+
+                if oldest_dir in prev_state:
+                    del prev_state[oldest_dir]
+                
+                prev_state[new_day_dir] = get_files_with_timestamps(new_day_dir)
+
+            LOGGER.info(f"Checking {len(prev_state)} folders with {sum([len(prev_state[dir]) for dir in prev_state])} files...")
+
+            curr_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor if dir in prev_state}
+
+            for dir in dirs_to_monitor:
+                added = [f for f in curr_state[dir] if f not in prev_state[dir]]
+                removed = [f for f in prev_state[dir] if f not in curr_state[dir]]
+                modified = [f for f in curr_state[dir] if f in prev_state[dir] and curr_state[dir][f] != prev_state[dir][f]]
+
+            if added:
+                added_examples = ', '.join(added[:3]) + ('...' if len(added) > 3 else '')
+                LOGGER.info(f"In {dir} - Added ({len(added)}): {added_examples}")
+            if removed:
+                removed_examples = ', '.join(removed[:3]) + ('...' if len(removed) > 3 else '')
+                LOGGER.info(f"In {dir} - Removed ({len(removed)}): {removed_examples}")
+            if modified:
+                modified_examples = ', '.join(modified[:3]) + ('...' if len(modified) > 3 else '')
+                LOGGER.info(f"In {dir} - Modified ({len(modified)}): {modified_examples}")
+
+                to_add = added + modified
+                if to_add:
+                    LOGGER.info(f"Adding {len(to_add)} files to the database...")
+                    add_specs_from_paths_to_database(to_add)
+                    LOGGER.info(f"Done adding {len(to_add)} files to the database.")
+
+            prev_state = curr_state
+            time.sleep(3*60)
 
     except KeyboardInterrupt:
-        for observer in observers:
-            observer.stop()
-
-    for observer in observers:
-        observer.join()
-
+        LOGGER.info("Keyboard interrupt received. Exiting...")
+        return
 
 if __name__ == "__main__":
-    DAYS_TO_CHECK = 1
-    observe_days(DAYS_TO_CHECK)
+    base_path = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
+    days_to_check = 30
+    try:
+        monitor_directories(base_path, days_to_check)
+    except Exception as e:
+        LOGGER.error(f"Fatal error during directory monitoring: {str(e)}")

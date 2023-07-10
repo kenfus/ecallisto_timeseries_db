@@ -8,14 +8,14 @@ from multiprocessing.pool import Pool as Pool
 
 from astropy.utils.data import clear_download_cache
 from tqdm import tqdm
+import pandas as pd
 
 import logging_utils
 from data_creation_utils import get_paths
-from database_functions import *
-from database_utils import *
+from database_functions import get_table_names_sql
+from database_utils import add_spec_from_path_to_database, add_instrument_from_path_to_database, create_dict_of_instrument_paths
 
 LOGGER = logging_utils.setup_custom_logger("database_data_addition")
-URL_FILE = "added_data_log/urls.parquet"
 
 
 def add_instruments_from_paths_to_database(dict_paths):
@@ -42,20 +42,17 @@ def add_instruments_from_paths_to_database(dict_paths):
 
 
 def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
-    if len(urls) == 0:
-        add_data_to_database(urls)
-    else:
-        partial_f = partial(add_spec_from_path_to_database, replace=replace)
-        with mp.Pool(cpu_count) as pool:
-            pool.map_async(
-                partial_f,
-                urls,
-                chunksize=chunk_size,
-            )
+    partial_f = partial(add_spec_from_path_to_database, replace=replace)
+    with mp.Pool(cpu_count) as pool:
+        pool.map_async(
+            partial_f,
+            urls,
+            chunksize=chunk_size,
+        )
 
-            # Wait for all tasks to complete
-            pool.close()
-            pool.join()
+        # Wait for all tasks to complete
+        pool.close()
+        pool.join()
 
     # Clear the cache to avoid memory issues
     clear_download_cache()
