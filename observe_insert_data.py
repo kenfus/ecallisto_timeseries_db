@@ -62,10 +62,7 @@ def monitor_directories(base_path, days_to_check):
                 
                 prev_state[new_day_dir] = get_files_with_timestamps(new_day_dir)
 
-            LOGGER.info(f"Example previous: {list(prev_state.keys())[-1]} has {len(list(prev_state.values())[0])} files.")
-
             curr_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor if dir in prev_state}
-            LOGGER.info(f"Example current: {list(curr_state.keys())[-1]} has {len(list(curr_state.values())[0])} files.")
 
             added = []
             removed = []
