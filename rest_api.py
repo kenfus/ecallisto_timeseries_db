@@ -93,10 +93,27 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
     return {"json_url": f"/api/data/{file_id}.json", "fits_url": f"/api/data/{file_id}.fits"}
 
 async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
-    if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
-        data = values_from_database_sql(**data_request_dict)
-    else:
-        data = timebucket_values_from_database_sql(**data_request_dict)
+    try:
+        if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
+            data = values_from_database_sql(**data_request_dict)
+        else:
+            data = timebucket_values_from_database_sql(**data_request_dict)
+
+
+    except ValueError as e:
+        LOGGER.error(f"Error in data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        LOGGER.error(e)
+        # Write error message into file
+        with open(file_path_json, "w") as f:
+            json.dump({"error": str(e)}, f)
+        return
+    
+    if len(data) == 0:
+        LOGGER.error(f"Error in data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}. No data found.")
+        LOGGER.error("No data found")
+        with open(file_path_json, "w") as f:
+            json.dump({"error": "No data found. Check your request?"}, f)
+        return
 
     # Logg
     LOGGER.info(f"Finished data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")

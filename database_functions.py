@@ -467,6 +467,9 @@ def values_from_database_sql(
     # Type checks
     if not isinstance(table, str):
         raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
+    
+    if not table in get_table_names_sql():
+        raise ValueError(f"Table {table} does not exist in the database")
 
     if columns is not None and not all(isinstance(column, str) for column in columns):
         raise TypeError("'columns' should be a list of str")
@@ -523,6 +526,9 @@ def timebucket_values_from_database_sql(
     # Type checks
     if not isinstance(table, str):
         raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
+    
+    if not table in get_table_names_sql():
+        raise ValueError(f"Table {table} does not exist in the database")
 
     if columns is not None and not all(isinstance(column, str) for column in columns):
         raise TypeError("'columns' should be a list of str")
