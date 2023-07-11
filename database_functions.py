@@ -346,6 +346,27 @@ def insert_is_burst_status_between_dates_sql(tablename, start_date, end_date):
         conn.commit()
         cursor.close()
 
+def get_table_names_with_data_between_dates_sql(start_date, end_date):
+    table_names = get_table_names_sql()
+    tables_with_data = []
+
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+
+        for table_name in table_names:
+            cursor.execute(
+                f"""SELECT EXISTS (
+                   SELECT 1
+                   FROM {table_name}
+                   WHERE datetime BETWEEN '{start_date}' AND '{end_date}'
+                   LIMIT 1);
+                """
+            )
+            has_data = cursor.fetchone()[0]
+            if has_data:
+                tables_with_data.append(table_name)
+        
+    return tables_with_data
 
 def add_new_column_default_value_sql(
     table_name, column_name, column_type, default_value

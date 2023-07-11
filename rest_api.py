@@ -3,7 +3,7 @@ import os
 import time
 import hashlib
 from typing import List, Optional
-
+from datetime import datetime, timedelta
 from astropy.io import fits
 from astropy.table import Table
 from fastapi import BackgroundTasks, FastAPI
@@ -14,6 +14,7 @@ from database_functions import (
     sql_result_to_df,
     timebucket_values_from_database_sql,
     values_from_database_sql,
+    get_table_names_with_data_between_dates_sql,
 )
 from database_utils import get_table_names_sql
 import logging_utils
@@ -32,7 +33,7 @@ app = FastAPI(
     title="E-Callisto REST API",
     openapi_url="/api/openapi.json",
     description="REST API for the E-Callisto database",
-    version="0.1",
+    version="0.2",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -134,6 +135,29 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
     hdul.writeto(file_path_fits)
 
+@app.get("/api/tables")
+async def get_tables():
+    table_names = get_table_names_sql()
+    LOGGER.info(f"Delivering table names at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    table_names = [table_name for table_name in table_names if table_name not in ["test", "test2"]]
+    return {"tables": table_names}
+
+class DataAvailabilityRequest(BaseModel):
+    end_datetime: str = Field(
+         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description="The end datetime for the data availability check"
+    )
+    start_datetime: str = Field(
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"), description="The start datetime for the data availability check"
+    )
+
+
+@app.post("/api/data_availability")
+async def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
+    LOGGER.info(f"Checking table data availability for: {request.dict()} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    table_names_with_data = get_table_names_with_data_between_dates_sql(request.start_datetime, request.end_datetime)
+    # Remove test table etc.
+    table_names_with_data = [table_name for table_name in table_names_with_data if table_name not in ["test", "test2"]]
+    return {"table_names": table_names_with_data}
 
 @app.get("/api/data/{file_id}.json")
 async def get_json(file_id: str):
