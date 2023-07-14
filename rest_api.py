@@ -61,9 +61,6 @@ class DataRequest(BaseModel):
         enum=["MIN", "MAX", "AVG", "MEDIAN"],
         example="MAX",
     )
-    return_type: str = Field(
-        "json", description="The desired return type", enum=["json", "fits"]
-    )
     columns: Optional[List[str]] = Field(
         None, description="List of columns to include in the response", example=None
     )
@@ -79,21 +76,21 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
 
     # Create a unique ID for this request and generate a filename based on this
     file_id = get_sha256_from_dict(data_request_dict)
-    file_path_json = f"data/{file_id}.json"
-    file_path_fits = f"data/{file_id}.fits"
+    metadata_path_json = f"data/{file_id}.json"
+    file_path_parquet = f"data/{file_id}.parquet"
 
     # Check if the file already exists
-    if os.path.exists(file_path_json) and os.path.exists(file_path_fits):
+    if os.path.exists(metadata_path_json) and os.path.exists(file_path_parquet):
         LOGGER.info(f"Data request: {data_request_dict} already exists at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     else:
         LOGGER.info(f"Data request: {data_request_dict} is new at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         # Add a task to run in the background that will get the data and save it to a file
-        background_tasks.add_task(get_and_save_data, data_request_dict, file_path_json, file_path_fits)
+        background_tasks.add_task(get_and_save_data, data_request_dict, file_path_parquet, metadata_path_json)
 
     # Return the URLs where the files will be available once the data has been fetched
-    return {"json_url": f"/api/data/{file_id}.json", "fits_url": f"/api/data/{file_id}.fits"}
+    return {"data_parquet_url": f"/api/data/{file_id}.parquet", "info_json_url": f"/api/data/{file_id}.json", "file_id": file_id}
 
-async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
+async def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
     try:
         if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
             data = values_from_database_sql(**data_request_dict)
@@ -105,14 +102,14 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
         LOGGER.error(f"Error in data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         LOGGER.error(e)
         # Write error message into file
-        with open(file_path_json, "w") as f:
+        with open(info_json_url, "w") as f:
             json.dump({"error": str(e)}, f)
         return
     
     if len(data) == 0:
         LOGGER.error(f"Error in data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}. No data found.")
         LOGGER.error("No data found")
-        with open(file_path_json, "w") as f:
+        with open(info_json_url, "w") as f:
             json.dump({"error": "No data found. Check your request?"}, f)
         return
 
@@ -120,20 +117,13 @@ async def get_and_save_data(data_request_dict, file_path_json, file_path_fits):
     LOGGER.info(f"Finished data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Create dir 
-    os.makedirs(os.path.dirname(file_path_json), exist_ok=True)
-    os.makedirs(os.path.dirname(file_path_fits), exist_ok=True)
+    os.makedirs(os.path.dirname(info_json_url), exist_ok=True)
 
     # Change data to dataframe
     df = sql_result_to_df(data)
 
     # Save as JSON
-    df.to_json(file_path_json, date_format="iso", orient="columns")
-
-    # Save as FITS
-    table = Table.from_pandas(df.dropna(axis=1, how="all"))
-    hdu = fits.table_to_hdu(table)
-    hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
-    hdul.writeto(file_path_fits)
+    df.to_parquet(file_path_parquet, compression='gzip')
 
 @app.get("/api/tables")
 async def get_tables():
@@ -168,15 +158,13 @@ async def get_json(file_id: str):
             return json.load(file)
     else:
         return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
-
-
-@app.get("/api/data/{file_id}.fits")
-async def get_fits(file_id: str):
-    file_path = f"data/{file_id}.fits"
+    
+@app.get("/api/data/{file_id}.parquet")
+async def get_parquet(file_id: str):
+    file_path = f"data/{file_id}.parquet"
     LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
-        with open(file_path, "rb") as file:
-            return StreamingResponse(file, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_id}.fits"'})
+        return StreamingResponse(open(file_path, "rb"), media_type="application/octet-stream")
     else:
         return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
     
