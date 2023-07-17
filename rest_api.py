@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -182,3 +183,24 @@ def get_sha256_from_dict(data: dict) -> str:
     """Generates a SHA256 hash from a dictionary."""
     data_string = json.dumps(data, sort_keys=True)  # we use sort_keys to ensure consistent ordering
     return hashlib.sha256(data_string.encode()).hexdigest()
+
+async def remove_old_files():
+    while True:
+        now = datetime.now()
+
+        for f in os.listdir("data"):
+            f = os.path.join("data", f)
+            n_files = len(os.listdir("data"))
+            if os.path.isfile(f):
+                timestamp = os.path.getmtime(f)
+                file_time = datetime.fromtimestamp(timestamp)
+                if now - file_time > timedelta(hours=24):
+                    os.remove(f)
+            LOGGER.info(f"Removed {n_files - len(os.listdir('data'))} files.")
+        await asyncio.sleep(60 * 60 * 24)  # sleep for 24 hours
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(remove_old_files())
+    
