@@ -4,8 +4,7 @@ import time
 import hashlib
 from typing import List, Optional
 from datetime import datetime, timedelta
-from astropy.io import fits
-from astropy.table import Table
+from fastapi import HTTPException
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -68,7 +67,7 @@ class DataRequest(BaseModel):
 
 # Add the BackgroundTasks parameter to your function
 @app.post("/api/data")
-async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
+def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
     data_request_dict = data_request.dict()
     data_request_dict["table"] = data_request_dict.pop("instrument_name")
 
@@ -78,6 +77,10 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
     file_id = get_sha256_from_dict(data_request_dict)
     metadata_path_json = f"data/{file_id}.json"
     file_path_parquet = f"data/{file_id}.parquet"
+
+    # Create json with information that we are processing the request
+    with open(metadata_path_json, "w") as f:
+        json.dump({"status": "processing"}, f)
 
     # Check if the file already exists
     if os.path.exists(metadata_path_json) and os.path.exists(file_path_parquet):
@@ -90,7 +93,7 @@ async def get_data(background_tasks: BackgroundTasks, data_request: DataRequest)
     # Return the URLs where the files will be available once the data has been fetched
     return {"data_parquet_url": f"/api/data/{file_id}.parquet", "info_json_url": f"/api/data/{file_id}.json", "file_id": file_id}
 
-async def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
+def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
     try:
         if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
             data = values_from_database_sql(**data_request_dict)
@@ -112,6 +115,8 @@ async def get_and_save_data(data_request_dict, file_path_parquet, info_json_url)
         with open(info_json_url, "w") as f:
             json.dump({"error": "No data found. Check your request?"}, f)
         return
+    
+
 
     # Logg
     LOGGER.info(f"Finished data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -122,11 +127,15 @@ async def get_and_save_data(data_request_dict, file_path_parquet, info_json_url)
     # Change data to dataframe
     df = sql_result_to_df(data)
 
-    # Save as JSON
+    # Save as DF
     df.to_parquet(file_path_parquet, compression='gzip')
 
+    # Save json all ok
+    with open(info_json_url, "w") as f:
+        json.dump({"status": "ok"}, f)
+
 @app.get("/api/tables")
-async def get_tables():
+def get_tables():
     table_names = get_table_names_sql()
     LOGGER.info(f"Delivering table names at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     table_names = [table_name for table_name in table_names if table_name not in ["test", "test2"]]
@@ -142,7 +151,7 @@ class DataAvailabilityRequest(BaseModel):
 
 
 @app.post("/api/data_availability")
-async def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
+def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
     LOGGER.info(f"Checking table data availability for: {request.dict()} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     table_names_with_data = get_table_names_with_data_between_dates_sql(request.start_datetime, request.end_datetime)
     # Remove test table etc.
@@ -150,23 +159,24 @@ async def get_table_names_with_data_between_dates(request: DataAvailabilityReque
     return {"table_names": table_names_with_data}
 
 @app.get("/api/data/{file_id}.json")
-async def get_json(file_id: str):
+def get_json(file_id: str):
     file_path = f"data/{file_id}.json"
     LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
             return json.load(file)
     else:
-        return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
+        raise HTTPException(status_code=204, detail="File not found. The data may still be fetching, or the file ID may be incorrect.")
     
 @app.get("/api/data/{file_id}.parquet")
-async def get_parquet(file_id: str):
+def get_parquet(file_id: str):
     file_path = f"data/{file_id}.parquet"
     LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(file_path)
     if os.path.exists(file_path):
         return StreamingResponse(open(file_path, "rb"), media_type="application/octet-stream")
     else:
-        return {"error": "File not found. The data may still be fetching, or the file ID may be incorrect."}
+        raise HTTPException(status_code=204, detail="File not found. Are you sure the data has been requested and that the data exists?")
     
 def get_sha256_from_dict(data: dict) -> str:
     """Generates a SHA256 hash from a dictionary."""
