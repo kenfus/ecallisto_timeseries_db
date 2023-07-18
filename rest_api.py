@@ -15,6 +15,7 @@ from database_functions import (
     timebucket_values_from_database_sql,
     values_from_database_sql,
     get_table_names_with_data_between_dates_sql,
+    check_if_table_has_data_between_dates_sql
 )
 from database_utils import get_table_names_sql
 import logging_utils
@@ -117,8 +118,6 @@ def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
             json.dump({"error": "No data found. Check your request?"}, f)
         return
     
-
-
     # Logg
     LOGGER.info(f"Finished data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -150,6 +149,27 @@ class DataAvailabilityRequest(BaseModel):
         (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"), description="The start datetime for the data availability check"
     )
 
+class TableDataCheckRequest(BaseModel):
+    table_name: str = Field(
+        ...,
+        description="The name of the table to check",
+        enum=get_table_names_sql(),
+        example="your_table_name",
+    )
+    start_datetime: str = Field(
+        ...,
+        description="The start datetime for the data check"
+    )
+    end_datetime: str = Field(
+        ...,
+        description="The end datetime for the data check"
+    )
+
+@app.post("/api/table_data_check")
+def check_table_data_availability(request: TableDataCheckRequest):
+    LOGGER.info(f"Checking data availability for table: {request.table_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    has_data = check_if_table_has_data_between_dates_sql(request.table_name, request.start_datetime, request.end_datetime)
+    return {"table_name": request.table_name, "has_data": has_data}
 
 @app.post("/api/data_availability")
 def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
@@ -196,7 +216,7 @@ async def remove_old_files():
                 file_time = datetime.fromtimestamp(timestamp)
                 if now - file_time > timedelta(hours=24):
                     os.remove(f)
-            LOGGER.info(f"Removed {n_files - len(os.listdir('data'))} files.")
+        LOGGER.info(f"Removed {n_files - len(os.listdir('data'))} files.")
         await asyncio.sleep(60 * 60 * 24)  # sleep for 24 hours
 
 

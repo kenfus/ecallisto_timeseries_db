@@ -368,6 +368,22 @@ def get_table_names_with_data_between_dates_sql(start_date, end_date):
         
     return tables_with_data
 
+def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date):
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT EXISTS (
+                SELECT 1
+                FROM {table_name}
+                WHERE datetime BETWEEN '{start_date}' AND '{end_date}'
+                LIMIT 1
+            );
+            """
+        )
+        has_data = cursor.fetchone()[0]
+        return has_data
+    
 def add_new_column_default_value_sql(
     table_name, column_name, column_type, default_value
 ):
