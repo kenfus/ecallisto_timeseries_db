@@ -18,7 +18,7 @@ def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18, 
     # Add black for NANS
     color_scale.insert(0, "black")
 
-    fig = px.imshow(df_rounded.T, color_continuous_scale=color_scale, zmin=df.min().min(), zmax=df.max().max())
+    fig = px.imshow(df_rounded.T, color_continuous_scale=color_scale, zmin=0, zmax=df.max().max())
     fig.update_layout(
         title=f"Spectogram of {instrument_name} between {sd_str} and {ed_str}",
         xaxis_title="Datetime",
