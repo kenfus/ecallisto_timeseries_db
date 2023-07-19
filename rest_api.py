@@ -7,8 +7,9 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import HTTPException
 from fastapi import BackgroundTasks, FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from fastapi.exceptions import StarletteHTTPException
 
 from database_functions import (
     sql_result_to_df,
@@ -34,7 +35,7 @@ app = FastAPI(
     title="E-Callisto REST API",
     openapi_url="/api/openapi.json",
     description="REST API for the E-Callisto database",
-    version="0.2",
+    version="0.3",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -66,6 +67,12 @@ class DataRequest(BaseModel):
         None, description="List of columns to include in the response", example=None
     )
 
+@app.exception_handler(StarletteHTTPException)
+async def redirect_to_redoc(request, exc):
+    if exc.status_code == 404:
+        redoc_url = "/api/redoc"  # Update with your ReDoc URL
+        return RedirectResponse(url=redoc_url, status_code=307)
+    return exc
 
 # Add the BackgroundTasks parameter to your function
 @app.post("/api/data")
