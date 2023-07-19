@@ -62,7 +62,7 @@ def generate_nav_bar():
                                         ],
                                     ),
                                 ],
-                                className="ml-2",
+                                className="ml-auto",
                             ),
                         ),
                     ],
