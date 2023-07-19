@@ -141,20 +141,12 @@ def get_tables():
     table_names = [table_name for table_name in table_names if table_name not in ["test", "test2"]]
     return {"tables": table_names}
 
-class DataAvailabilityRequest(BaseModel):
-    end_datetime: str = Field(
-         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description="The end datetime for the data availability check"
-    )
-    start_datetime: str = Field(
-        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"), description="The start datetime for the data availability check"
-    )
-
 class TableDataCheckRequest(BaseModel):
-    table_name: str = Field(
+    instrument_name: str = Field(
         ...,
         description="The name of the table to check",
         enum=get_table_names_sql(),
-        example="your_table_name",
+        example="austria_unigraz_01",
     )
     start_datetime: str = Field(
         ...,
@@ -167,9 +159,18 @@ class TableDataCheckRequest(BaseModel):
 
 @app.post("/api/table_data_check")
 def check_table_data_availability(request: TableDataCheckRequest):
-    LOGGER.info(f"Checking data availability for table: {request.table_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    has_data = check_if_table_has_data_between_dates_sql(request.table_name, request.start_datetime, request.end_datetime)
-    return {"table_name": request.table_name, "has_data": has_data}
+    LOGGER.info(f"Checking data availability for table: {request.instrument_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    has_data = check_if_table_has_data_between_dates_sql(request.instrument_name, request.start_datetime, request.end_datetime)
+    return {"instrument_name": request.instrument_name, "has_data": has_data}
+
+
+class DataAvailabilityRequest(BaseModel):
+    end_datetime: str = Field(
+         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description="The end datetime for the data availability check"
+    )
+    start_datetime: str = Field(
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"), description="The start datetime for the data availability check"
+    )
 
 @app.post("/api/data_availability")
 def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
