@@ -10,6 +10,7 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from fastapi.exceptions import StarletteHTTPException
+from starlette.responses import JSONResponse
 
 from database_functions import (
     sql_result_to_df,
@@ -66,13 +67,6 @@ class DataRequest(BaseModel):
     columns: Optional[List[str]] = Field(
         None, description="List of columns to include in the response", example=None
     )
-
-@app.exception_handler(StarletteHTTPException)
-async def redirect_to_redoc(request, exc):
-    if exc.status_code == 404:
-        redoc_url = "/api/redoc"  # Update with your ReDoc URL
-        return RedirectResponse(url=redoc_url, status_code=307)
-    return exc
 
 # Add the BackgroundTasks parameter to your function
 @app.post("/api/data")
@@ -195,7 +189,7 @@ def get_json(file_id: str):
         with open(file_path, "r") as file:
             return json.load(file)
     else:
-        raise HTTPException(status_code=204, detail="File not found. The data may still be fetching, or the file ID may be incorrect.")
+        raise HTTPException(status_code=204, detail="File not found.")
     
 @app.get("/api/data/{file_id}.parquet")
 def get_parquet(file_id: str):
@@ -205,7 +199,7 @@ def get_parquet(file_id: str):
     if os.path.exists(file_path):
         return StreamingResponse(open(file_path, "rb"), media_type="application/octet-stream")
     else:
-        raise HTTPException(status_code=204, detail="File not found. Are you sure the data has been requested and that the data exists?")
+        raise HTTPException(status_code=204, detail="File not found. Check the JSON for errors.")
     
 def get_sha256_from_dict(data: dict) -> str:
     """Generates a SHA256 hash from a dictionary."""
