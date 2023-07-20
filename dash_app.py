@@ -151,7 +151,7 @@ def update_graph(n_clicks, instruments, start_date, end_date):
             df = fill_missing_timesteps_with_nan(df)
             # Background subtraction
             df = elimwrongchannels(df)
-            df = subtract_rolling_background(df, window_size=30)
+            df = subtract_rolling_background(df, window=10, center=False)
             fig = plot_spectogram(df, instrument, start_datetime, end_datetime)
             fig_style = {'display': 'block'} if fig else {'display': 'none'}
             graph = dcc.Graph(
