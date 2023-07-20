@@ -7,7 +7,7 @@ def generate_nav_bar():
             [
                 dbc.Row(
                     [
-                        dbc.Col(html.Img(src="https://ecallisto.cs.technik.fhnw.ch/prod/static/images/Logo.png", height="50px"), className="p-0"),
+                        dbc.Col(html.Img(src="/assets/logo_ecallisto_website.png", height="50px"), className="p-0"),
                         dbc.Col(
                             dbc.Nav(
                                 [

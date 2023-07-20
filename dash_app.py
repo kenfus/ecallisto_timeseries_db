@@ -1,8 +1,10 @@
 import dash
 from dash.dependencies import Input, Output, State
 from dash import dcc, html
-from database_functions import timebucket_values_from_database_sql, sql_result_to_df, fill_missing_timesteps_with_nan, get_table_names_sql, check_if_table_has_data_between_dates_sql, get_table_names_with_data_between_dates_sql
-from plotting_utils import timedelta_to_sql_timebucket_value, plot_spectogram
+from database_functions import timebucket_values_from_database_sql, sql_result_to_df, get_table_names_sql, check_if_table_has_data_between_dates_sql, get_table_names_with_data_between_dates_sql
+from plotting_utils import timedelta_to_sql_timebucket_value
+from ecallisto_ng.plotting.utils import plot_spectogram, fill_missing_timesteps_with_nan
+from ecallisto_ng.data_processing.utils import subtract_rolling_background, elimwrongchannels
 import pandas as pd
 from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
@@ -143,9 +145,13 @@ def update_graph(n_clicks, instruments, start_date, end_date):
                 warning_div = html.Div(warning_message, style={'color': 'red', 'margin-top': '10px'})
                 graphs.append(warning_div)
                 continue
+            # Create data
             sql_result = timebucket_values_from_database_sql(**query)
             df = sql_result_to_df(sql_result, datetime_col='datetime')
             df = fill_missing_timesteps_with_nan(df)
+            # Background subtraction
+            df = elimwrongchannels(df)
+            df = subtract_rolling_background(df, window_size=30)
             fig = plot_spectogram(df, instrument, start_datetime, end_datetime)
             fig_style = {'display': 'block'} if fig else {'display': 'none'}
             graph = dcc.Graph(
