@@ -4,7 +4,7 @@ from dash import dcc, html
 from database_functions import timebucket_values_from_database_sql, sql_result_to_df, get_table_names_sql, check_if_table_has_data_between_dates_sql, get_table_names_with_data_between_dates_sql
 from plotting_utils import timedelta_to_sql_timebucket_value
 from ecallisto_ng.plotting.utils import plot_spectogram, fill_missing_timesteps_with_nan
-from ecallisto_ng.data_processing.utils import subtract_rolling_background, elimwrongchannels
+from ecallisto_ng.data_processing.utils import subtract_rolling_background, elimwrongchannels, subtract_constant_background
 import pandas as pd
 from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
@@ -15,7 +15,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 navbar = generate_nav_bar()
 
 # Define some constants
-RESOLUTION_WIDTH = 720
+RESOLUTION_WIDTH = 1080
 
 # for gunicorn
 server = app.server
@@ -59,8 +59,9 @@ app.layout = html.Div([
         html.Div([
             dcc.DatePickerRange(
                 id='date-picker-range',
-                start_date=datetime.now() - timedelta(days=5),
-                end_date=datetime.now()
+                start_date=datetime.now() - timedelta(days=1),
+                end_date=datetime.now(),
+                max_date_allowed=datetime.now(),
             ),
         ], style={'width': '100%', 'display': 'block', 'margin-top': '60px'}),
 
@@ -148,10 +149,11 @@ def update_graph(n_clicks, instruments, start_date, end_date):
             # Create data
             sql_result = timebucket_values_from_database_sql(**query)
             df = sql_result_to_df(sql_result, datetime_col='datetime')
+            # Sync time axis between plots
             df = fill_missing_timesteps_with_nan(df)
             # Background subtraction
             df = elimwrongchannels(df)
-            df = subtract_rolling_background(df, window=10, center=False)
+            df = subtract_rolling_background(df, window=10)
             fig = plot_spectogram(df, instrument, start_datetime, end_datetime)
             fig_style = {'display': 'block'} if fig else {'display': 'none'}
             graph = dcc.Graph(
