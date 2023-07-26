@@ -17,7 +17,8 @@ from database_functions import (
     timebucket_values_from_database_sql,
     values_from_database_sql,
     get_table_names_with_data_between_dates_sql,
-    check_if_table_has_data_between_dates_sql
+    check_if_table_has_data_between_dates_sql,
+    get_min_max_datetime_from_table_sql
 )
 from database_utils import get_table_names_sql
 import logging_utils
@@ -180,6 +181,20 @@ def get_table_names_with_data_between_dates(request: DataAvailabilityRequest):
     # Remove test table etc.
     table_names_with_data = [table_name for table_name in table_names_with_data if table_name not in ["test", "test2"]]
     return {"table_names": table_names_with_data}
+
+class TableNameRequest(BaseModel):
+    instrument_name: str
+
+@app.post("/api/min_max_datetime")
+def get_min_max_datetime(request: TableNameRequest):
+    LOGGER.info(f"Fetching min and max datetime from: {request.instrument_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    try:
+        min_max_datetime = get_min_max_datetime_from_table_sql(request.instrument_name)
+        return {"min_datetime": min_max_datetime[0], "max_datetime": min_max_datetime[1]}
+    except Exception as e:
+        LOGGER.error(f"Error occurred: {str(e)}")
+        raise HTTPException(status_code=400, detail="Error in fetching data.")
+
 
 @app.get("/api/data/{file_id}.json")
 def get_json(file_id: str):
