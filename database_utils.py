@@ -81,6 +81,15 @@ def extract_instrument_name(file_path):
 
     return file_name[1:]  # Remove the first '-'
 
+def get_last_spectrogram_from_paths_list(paths: dict[str, list[str]]) -> CallistoSpectrogram:
+    """Returns the last spectrogram for each instrument from a list of paths.
+    """
+    date_paths = zip(paths["date_changed"], paths["path"])
+    # Make sure the paths are sorted by date
+    last_path = sorted(date_paths, key=lambda x: x[0])[-1][1]
+
+    spec = CallistoSpectrogram.read(last_path)
+    return spec
 
 def get_min_date_of_table(table_name):
     """Get the min date of a table in the database.
@@ -150,6 +159,17 @@ def get_max_of_min_dates_of_tables():
     return np.max(min_dates)
 
 
+# Sometimes, there are exception to this rule, sadly:
+# TODO: Improve this function
+NON_CAPITAL_SUBSTRINGS = [
+    'Australia-ASSA',
+    'Arecibo-Observatory',
+    'FINLAND-Siuntio',
+    'Malaysia-Banting',
+    'POLAND-Grotniki',
+    'SWISS-Landschlacht',
+    ]
+
 def reverse_extract_instrument_name(instrument_name, include_number=False):
     """
     Convert a lower-case instrument name with underscores to its original hyphenated form.
@@ -181,8 +201,23 @@ def reverse_extract_instrument_name(instrument_name, include_number=False):
         if parts[-1].isnumeric():
             parts.pop()
     # Join the parts with hyphens and return the result
-    return "-".join(parts)
+    combine = "-".join(parts)
+    for substring in NON_CAPITAL_SUBSTRINGS:
+        if substring.upper() in combine:
+            combine = combine.replace(substring.upper(), substring)
+            break
+    return combine
 
+def instrument_name_to_glob_pattern(instrument_name: str) -> str:
+    """Converts an instrument name to a glob pattern compatible with the e-Callisto 
+    page containing the fits files at http://soleil.i4ds.ch/solarradio/data/2002-20yy_Callisto/
+    """
+    in_dirty = reverse_extract_instrument_name(instrument_name, include_number=True)
+    split = in_dirty.split("-")
+    number = split.pop()
+    string = "-".join(split)
+
+    return f"{string}*{number}.fit.gz" 
 
 def add_spec_from_path_to_database(
     path: str, progress: Union[None, tqdm] = None, replace: bool = False

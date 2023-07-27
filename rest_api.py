@@ -7,10 +7,8 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import HTTPException
 from fastapi import BackgroundTasks, FastAPI
-from fastapi.responses import StreamingResponse, RedirectResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from fastapi.exceptions import StarletteHTTPException
-from starlette.responses import JSONResponse
 
 from database_functions import (
     sql_result_to_df,
@@ -20,7 +18,10 @@ from database_functions import (
     check_if_table_has_data_between_dates_sql,
     get_min_max_datetime_from_table_sql
 )
-from database_utils import get_table_names_sql
+## To add meta data
+from database_utils import get_table_names_sql, get_last_spectrogram_from_paths_list, instrument_name_to_glob_pattern
+from bulk_load_to_database_between_dates import get_paths # TODO: Move this get_paths to another utils file.
+##
 import logging_utils
 LOGGER = logging_utils.setup_custom_logger("rest_api")
 
@@ -128,6 +129,12 @@ def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
 
     # Change data to dataframe
     df = sql_result_to_df(data)
+
+    ## Add metadata
+    try:
+        df = add_meta_data_from_spectogram_header(df, data_request_dict["table"])
+    except Exception as e:
+        df.attrs["error"] = str(e)
 
     # Save as DF
     df.to_parquet(file_path_parquet, compression='gzip')
@@ -241,3 +248,25 @@ async def remove_old_files():
 async def startup_event():
     asyncio.create_task(remove_old_files())
     
+
+
+### Other helping functions
+def add_meta_data_from_spectogram_header(df, instrument_name):
+    """
+    Add metadata from the spectrogram header to the dataframe.
+    """
+    df = df.copy()
+    # Get last day from df
+    last_day = df.index.max().date()
+    # Get glob pattern
+    glob_pattern = instrument_name_to_glob_pattern(instrument_name)
+    # Get paths
+    paths = get_paths(last_day, last_day, glob_pattern)
+    # Get last spectrogram
+    last_spectrogram = get_last_spectrogram_from_paths_list(paths)
+    # Add metadata
+    for key, value in last_spectrogram.header.items():
+        df.attrs[key] = value
+
+    del last_spectrogram
+    return df
