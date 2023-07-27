@@ -80,25 +80,27 @@ def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
 
     # Create a unique ID for this request and generate a filename based on this
     file_id = get_sha256_from_dict(data_request_dict)
-    metadata_path_json = f"data/{file_id}.json"
+    info_json_url = f"data/{file_id}.json"
     file_path_parquet = f"data/{file_id}.parquet"
+    meta_data_url = f"data/{file_id}_meta_data.json"
+
 
     # Create json with information that we are processing the request
-    with open(metadata_path_json, "w") as f:
+    with open(info_json_url, "w") as f:
         json.dump({"status": "processing"}, f)
 
     # Check if the file already exists
-    if os.path.exists(metadata_path_json) and os.path.exists(file_path_parquet):
+    if os.path.exists(info_json_url) and os.path.exists(file_path_parquet):
         LOGGER.info(f"Data request: {data_request_dict} already exists at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     else:
         LOGGER.info(f"Data request: {data_request_dict} is new at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         # Add a task to run in the background that will get the data and save it to a file
-        background_tasks.add_task(get_and_save_data, data_request_dict, file_path_parquet, metadata_path_json)
+        background_tasks.add_task(get_and_save_data, data_request_dict, file_path_parquet, info_json_url, meta_data_url)
 
     # Return the URLs where the files will be available once the data has been fetched
-    return {"data_parquet_url": f"/api/data/{file_id}.parquet", "info_json_url": f"/api/data/{file_id}.json", "file_id": file_id}
+    return {"data_parquet_url": f"/api/data/{file_id}.parquet", "info_json_url": f"/api/data/{file_id}.json", "file_id": file_id, 'meta_data_url': f"/api/data/{file_id}_meta_data.json"}
 
-def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
+def get_and_save_data(data_request_dict, file_path_parquet, info_json_url, meta_data_url):
     try:
         if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
             data = values_from_database_sql(**data_request_dict)
@@ -132,12 +134,18 @@ def get_and_save_data(data_request_dict, file_path_parquet, info_json_url):
 
     ## Add metadata
     try:
-        df = add_meta_data_from_spectogram_header(df, data_request_dict["table"])
+        meta_data = return_header_from_newest_spectogram(df, data_request_dict["table"])
     except Exception as e:
-        df.attrs["error"] = str(e)
+        meta_data = {}
+        meta_data["error"] = str(e)
 
     # Save as DF
+    ## TODO: Replace parquet with something that supports meta data?
     df.to_parquet(file_path_parquet, compression='gzip')
+
+    # Save json with metadata
+    with open(meta_data_url, "w") as f:
+        json.dump(meta_data, f)
 
     # Save json all ok
     with open(info_json_url, "w") as f:
@@ -212,6 +220,16 @@ def get_json(file_id: str):
             return json.load(file)
     else:
         raise HTTPException(status_code=204, detail="File not found.")
+
+@app.get("/api/data/{file_id}_meta_data.json")
+def get_json(file_id: str):
+    file_path = f"data/{file_id}_meta_data.json"
+    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            return json.load(file)
+    else:
+        raise HTTPException(status_code=204, detail="File not found.")
     
 @app.get("/api/data/{file_id}.parquet")
 def get_parquet(file_id: str):
@@ -251,9 +269,10 @@ async def startup_event():
 
 
 ### Other helping functions
-def add_meta_data_from_spectogram_header(df, instrument_name):
+def return_header_from_newest_spectogram(df, instrument_name):
     """
-    Add metadata from the spectrogram header to the dataframe.
+    Add the header from the newest spectrogram (based on the datetime inside the df)
+    to the dataframe.
     """
     df = df.copy()
     # Get last day from df
@@ -264,9 +283,10 @@ def add_meta_data_from_spectogram_header(df, instrument_name):
     paths = get_paths(last_day, last_day, glob_pattern)
     # Get last spectrogram
     last_spectrogram = get_last_spectrogram_from_paths_list(paths)
+    dict_ = {}
     # Add metadata
     for key, value in last_spectrogram.header.items():
-        df.attrs[key] = value
+        dict_[key] = value
 
     del last_spectrogram
-    return df
+    return dict_
