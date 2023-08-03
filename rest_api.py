@@ -142,6 +142,7 @@ def get_and_save_data(data_request_dict, file_path_parquet, info_json_url, meta_
     # Save as DF
     ## TODO: Replace parquet with something that supports meta data?
     df.to_parquet(file_path_parquet, compression='gzip')
+    del df
 
     # Save json with metadata
     with open(meta_data_url, "w") as f:
