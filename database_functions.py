@@ -96,20 +96,52 @@ def get_column_names_clean(
         for column in columns_to_add:
             column_names.insert(0, column)
     return column_names
+    
 
 def sql_result_to_df(
     result, datetime_col="datetime", columns: list = None, meta_data: dict = None
 ):
     """
-    Converts the given result from a sql query to a pandas dataframe
+    Converts the given result from a SQL query to a pandas DataFrame.
+    
+    Parameters:
+    - result: The result obtained from a SQL query. This could be a list of dictionaries, where each dictionary represents a row of data. 
+              Alternatively, 'result' could be a DataFrame, in which case it will be processed directly. 
+              Each key in the dictionary represents a column name, and the corresponding value represents the data in that column.
+              
+    - datetime_col (str, optional): Name of the column to be treated as the datetime. 
+                                     If 'datetime', the function will convert the 'datetime' column to pandas datetime format.
+                                     If 'time', the function will not do any conversion.
+                                     Defaults to 'datetime'.
+
+    - columns (list, optional): List of column names for the resulting DataFrame. 
+                                If not specified, the function will attempt to infer the column names from the 'result' input.
+                                If 'result' is a list of dictionaries, the function will use the keys of the dictionaries as column names.
+                                If 'result' is something else (e.g., a list of lists), the function will generate default column names.
+
+    - meta_data (dict, optional): Dictionary containing metadata for the DataFrame. 
+                                  Each key-value pair in the dictionary will be stored in the DataFrame's 'attrs' attribute.
+                                  This can be used to attach additional information to the DataFrame.
+                                  For example, 'meta_data' might contain information about when and how the data was collected.
+
+    Returns:
+    - df (pandas.DataFrame): DataFrame containing the data from 'result'. The DataFrame's index will be set to the datetime column, 
+                             and any columns that only contain NaN values will be dropped.
+                             
+    Raises:
+    - ValueError: If 'datetime_col' is not 'datetime' or 'time'.
     """
-    if columns is None:
+
+    if not isinstance(result, pd.DataFrame):
         if isinstance(result[0], dict):
             columns = list(result[0].keys())
-            columns = get_column_names_clean(columns)
         else:
             columns = [f"column_{i}" for i in range(len(result[0]))]
+    else:
+        columns = result.columns
     df = pd.DataFrame(result)
+    # Clean colmns 
+    columns = get_column_names_clean(columns)
     df.columns = columns
     if datetime_col == "datetime":
         df["datetime"] = pd.to_datetime(df["datetime"])
@@ -128,93 +160,20 @@ def sql_result_to_df(
             df.attrs[key] = value
     return df.dropna(how="all", axis=1)
 
+def fetch_data_from_chunks_to_df(
+        chunks,
+):
+    # Initialize an empty DataFrame
+    final_df = pd.DataFrame()
 
-def subtract_background_image(df, bg_df):
-    """
-    Subtract background image from dataframe
-    :param df: dataframe
-    :param bg_df: background dataframe
-    :return: dataframe with background image subtracted
-    """
-    df = df.copy()
-    bg_df = bg_df.copy()
-    for index, row in bg_df.iterrows():
-        df[df.index.hour == index] = df[df.index.hour == index] - row
-    return df
+    # Iterate over the chunks of results
+    for chunk in chunks:
+        # Do any necessary processing on the chunk...
+        
+        # Append the DataFrame to the final_df
+        final_df = pd.concat([final_df, chunk])
 
-def create_continuous_aggregate_view_no_refresh(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            CREATE MATERIALIZED VIEW {view_name}
-            WITH (timescaledb.continuous) AS
-            SELECT time_bucket('1 day', datetime) AS day,
-                   COUNT(*) AS row_count
-            FROM {table_name}
-            GROUP BY day
-            WITH NO DATA;
-        """
-        )
-        conn.commit()
-
-
-def get_daily_rows_for_table_sql(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT * FROM {view_name};")
-        results = cur.fetchall()
-    return results
-
-
-def remove_continuous_aggregate_policy(table_name):
-    view_name = f"{table_name}_daily_row_count"
-
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT remove_continuous_aggregate_policy('{view_name}');
-        """
-        )
-        conn.commit()
-
-
-def recompute_continuous_aggregate_view(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT refresh_continuous_aggregate('{view_name}');
-        """
-        )
-        conn.commit()
-
-
-def set_daily_refresh_policy(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT add_continuous_aggregate_policy('{view_name}',
-                start_offset => INTERVAL '20 year',
-                end_offset => INTERVAL '0 min',
-                schedule_interval => INTERVAL '1 day');
-        """
-        )
-        conn.commit()
-
-
-def drop_daily_rows_for_table_sql(table_name):
-    view_name = f"{table_name}_daily_row_count"
-    with psycopg2.connect(CONNECTION) as conn:
-        cur = conn.cursor()
-        cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {view_name};")
-        conn.commit()
+    return final_df
 
 
 def create_table_sql(table_name, columns):
@@ -278,22 +237,6 @@ def drop_table_sql(table_name):
         cursor.close()
 
 
-def count_rows_of_data_per_day_per_table_sql(table_name):
-    """
-    Returns the number of rows per day per table
-    """
-    with psycopg2.connect(CONNECTION) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"""SELECT date_trunc('day', datetime) as day, COUNT(*)
-                        FROM {table_name}
-                        GROUP BY day
-                        ORDER BY day;
-                        """
-        )
-        tuple_list = cursor.fetchall()
-        return [tup for tup in tuple_list]
-
 
 def get_table_names_sql():
     with psycopg2.connect(CONNECTION) as conn:
@@ -309,42 +252,6 @@ def get_table_names_sql():
         tuple_list = cursor.fetchall()
         return [tup[0] for tup in tuple_list]
 
-
-def insert_is_burst_status_between_dates_sql(tablename, start_date, end_date):
-    """Insert is_burst status between two dates.
-
-    Parameters
-    ----------
-    tablename : str
-        The table name to insert the is_burst status for.
-    start_date : `~datetime.datetime`
-        The start date to insert the is_burst status for.
-    end_date : `~datetime.datetime`
-        The end date to insert the is_burst status for.
-
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    The function first finds the unique index data and the indices of the non-unique index data.
-    It then combines the non-unique index data using the method specified by the `method` parameter.
-    """
-    start_date = start_date.strftime("%Y-%m-%d %H:%M:%S")
-    end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
-    with psycopg2.connect(CONNECTION) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"""
-        UPDATE {tablename}
-        SET is_burst = TRUE
-        WHERE datetime BETWEEN '{start_date}' AND '{end_date}'
-        """
-        )
-        conn.commit()
-        cursor.close()
 
 def get_table_names_with_data_between_dates_sql(start_date, end_date):
     table_names = get_table_names_sql()
@@ -488,7 +395,7 @@ def get_rolling_mean_sql(table, start_time, end_time, timebucket="1H"):
             lambda x: datetime.strptime(x, "%Y-%m-%d %H:%M:%S")
         )
         return df
-
+    
 
 def values_from_database_sql(
     table: str,
@@ -496,22 +403,9 @@ def values_from_database_sql(
     end_datetime: str,
     columns: List[str] = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    chunk_size: int = 20000,  # you can adjust this according to your memory size
     **kwargs,
 ):
-    """
-    Returns all values between start and end time in the given table, without any aggregation.
-    """
-    # Type checks
-    if not isinstance(table, str):
-        raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
-    
-    if not table in get_table_names_sql():
-        raise ValueError(f"Table {table} does not exist in the database")
-
-    if columns is not None and not all(isinstance(column, str) for column in columns):
-        raise TypeError("'columns' should be a list of str")
-
-    # Check date
     try:
         parse(start_datetime)
     except ValueError as e:
@@ -520,8 +414,7 @@ def values_from_database_sql(
     try:
         parse(end_datetime)
     except ValueError as e:
-        raise ValueError(f"start_datetime error: {e}")
-
+        raise ValueError(f"end_datetime error: {e}")
     if not isinstance(columns_not_to_select, list) or not all(
         isinstance(column, str) for column in columns_not_to_select
     ):
@@ -531,20 +424,23 @@ def values_from_database_sql(
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]
 
-    # Query
     columns_sql = ",".join(columns)
     query = f"SELECT datetime, {columns_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}'"
 
-    # Check the query for harmful SQL
     check_query_for_harmful_sql(query)
 
     with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(name='server_side_cursor') as cur:  # Use a named cursor to create a server-side cursor
+            cur.itersize = chunk_size  # Set the fetch size
             cur.execute(query)
-            return [
-                dict(zip(["datetime"] + columns, row)) for row in cur.fetchall()
-            ]  # return list of dict
 
+            while True:
+                records = cur.fetchmany(chunk_size)
+                if not records:
+                    break
+
+                yield pd.DataFrame(records, columns=["datetime"] + columns)  # yield dataframe directly
+        
 
 def timebucket_values_from_database_sql(
     table: str,
@@ -555,6 +451,7 @@ def timebucket_values_from_database_sql(
     agg_function: str = "avg",
     quantile_value: float = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    chunk_size: int = 20000,  # you can adjust this according to your memory size
     **kwargs,
 ):
     """
@@ -630,11 +527,16 @@ def timebucket_values_from_database_sql(
     check_query_for_harmful_sql(query)
 
     with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(name='server_side_cursor') as cur:  # Use a named cursor to create a server-side cursor
+            cur.itersize = chunk_size  # Set the fetch size
             cur.execute(query)
-            return [
-                dict(zip(["datetime"] + columns, row)) for row in cur.fetchall()
-            ]  # return list of dict
+
+            while True:
+                records = cur.fetchmany(chunk_size)
+                if not records:
+                    break
+
+                yield pd.DataFrame(records, columns=["datetime"] + columns)  # yield dataframe directly
 
 
 def get_min_max_datetime_from_table_sql(table_name) -> tuple:
@@ -699,19 +601,6 @@ def insert_values_sql(table_name, columns, values):
         cursor.close()
 
 
-def drop_table_sql(table_name):
-    """
-    Drops a table from the database if it exists
-    """
-    with psycopg2.connect(CONNECTION) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"""DROP TABLE IF EXISTS {table_name};
-                        """
-        )
-        conn.commit()
-        cursor.close()
-
 
 def drop_database_sql(database_name):
     """
@@ -771,101 +660,6 @@ def get_size_of_database_sql():
         )
         size = cursor.fetchone()[0]
         return size
-
-
-def get_values_from_database_sql(table, start_time, end_time, columns=None):
-    """
-    Returns the values from the given table between the given start and end time
-    """
-    if columns is None:
-        columns = "*"
-
-    with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT {columns} FROM {table} WHERE datetime BETWEEN '{start_time}' AND '{end_time}'"
-            )
-            return cur.fetchall()
-
-
-def sql_background_image_to_df(result, columns=None, meta_data: dict = None):
-    """
-    Converts the given result from a sql query to a pandas dataframe
-    """
-    df = pd.DataFrame(result, columns=columns)
-    df = df.set_index("time")
-    for column in df.columns:
-        try:
-            # Check if int is possible
-            if all(df[column].astype(int) == df[column]):
-                df[column] = df[column].astype(int)
-            else:
-                df[column] = df[column].astype(float)
-        except:
-            pass
-    if meta_data:
-        for key, value in meta_data.items():
-            df.attrs[key] = value
-    return df
-
-def get_spectogram_background_image_sql(
-    table: str,
-    end_time: str,
-    length: str = "1w",
-    columns: List[str] = None,
-    timebucket: str = "hour",
-    agg_function: str = "avg",
-    quantile_value: float = None,
-    columns_not_to_select: List[str] = ["datetime", "burst_type"],
-):
-    """
-    Get a background image for the spectrogram plot
-    :param table: table name
-    :param end_time: end time
-    :param timebucket: timebucket. e.g. minute, hour. This is then average over the timebucket between start and end time. E.g. if you select 1h, it takes the
-    <agg_function> of all daily-hours between start and end time, thus returning a row per hour.
-    :param agg_function: aggregation function. e.g. MAX, MIN, AVG, SUM, QUANTILE
-    :param quantile_value: quantile value. Only used if agg_function is quantile
-    :param columns_not_to_select: columns not to select
-    :return: background image
-    """
-    if not columns:
-        columns = get_column_names_sql(table)
-        columns = [column for column in columns if column not in columns_not_to_select]
-
-    if agg_function == "quantile" and quantile_value is None:
-        raise ValueError(
-            "quantile_value must be specified when using agg_function 'quantile'"
-        )
-
-    if agg_function == "quantile":
-        agg_function_sql = ",".join(
-            [
-                f"percentile_disc({quantile_value}) WITHIN GROUP (ORDER BY {column}) AS {column}"
-                for column in columns
-            ]
-        )
-    else:
-        agg_function_sql = ",".join(
-            [f"{agg_function}({column}) AS {column}" for column in columns]
-        )
-
-    # Get data between start and end time, grouped by daily hour and aggregated by the agg_function with the help of DATE_TRUNC
-    query = f"""
-    SELECT
-        DATE_PART('{timebucket}', datetime) as time, {agg_function_sql}
-    FROM
-        {table}
-    WHERE 
-        datetime BETWEEN '{end_time}'::timestamp - '{length}'::interval AND '{end_time}'::timestamp
-    GROUP BY
-        time
-    """
-    with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            return cur.fetchall()
-
 
 def check_query_for_harmful_sql(query: str):
     harmful_patterns = [

@@ -16,7 +16,8 @@ from database_functions import (
     values_from_database_sql,
     get_table_names_with_data_between_dates_sql,
     check_if_table_has_data_between_dates_sql,
-    get_min_max_datetime_from_table_sql
+    get_min_max_datetime_from_table_sql,
+    fetch_data_from_chunks_to_df
 )
 ## To add meta data
 from database_utils import get_table_names_sql, get_last_spectrogram_from_paths_list, instrument_name_to_glob_pattern
@@ -102,10 +103,10 @@ def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
 
 def get_and_save_data(data_request_dict, file_path_parquet, info_json_url, meta_data_url):
     try:
-        if not any([data_request_dict["timebucket"], data_request_dict["agg_function"]]):
-            data = values_from_database_sql(**data_request_dict)
+        if data_request_dict["timebucket"] and data_request_dict["agg_function"]:
+            data = fetch_data_from_chunks_to_df(timebucket_values_from_database_sql(**data_request_dict))
         else:
-            data = timebucket_values_from_database_sql(**data_request_dict)
+            data = fetch_data_from_chunks_to_df(values_from_database_sql(**data_request_dict))
 
 
     except ValueError as e:
@@ -250,10 +251,9 @@ def get_sha256_from_dict(data: dict) -> str:
 async def remove_old_files():
     while True:
         now = datetime.now()
-
+        n_files = len(os.listdir("data"))
         for f in os.listdir("data"):
             f = os.path.join("data", f)
-            n_files = len(os.listdir("data"))
             if os.path.isfile(f):
                 timestamp = os.path.getmtime(f)
                 file_time = datetime.fromtimestamp(timestamp)

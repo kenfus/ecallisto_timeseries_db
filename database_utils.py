@@ -8,13 +8,12 @@ import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
 from tqdm import tqdm
 
-from database_functions import (add_new_column_default_value_sql,
+from database_functions import (
                                 add_new_column_sql,
                                 create_table_datetime_primary_key_sql,
                                 create_table_sql,
                                 drop_values_between_two_dates_sql,
                                 get_column_names_sql,
-                                get_daily_rows_for_table_sql,
                                 get_distinct_dates_from_table_sql,
                                 get_min_max_datetime_from_table_sql,
                                 get_table_names_sql, insert_values_sql,
@@ -25,20 +24,6 @@ from spectogram_utils import (masked_spectogram_to_array,
                               spec_time_to_pd_datetime)
 
 LOGGER = logging.getLogger("database_data_addition")
-
-def get_daily_rows_for_tables(tables=None):
-    if tables is None:
-        tables = get_table_names_sql()
-    df = {}
-    for table in tqdm(tables):
-        try:
-            df[table] = pd.DataFrame(
-                get_daily_rows_for_table_sql(table), columns=["date", table]
-            ).set_index("date")
-        except:
-            pass
-
-    return pd.concat(df.values(), axis=1, join="outer").reset_index()
 
 
 def extract_instrument_name(file_path):
@@ -367,11 +352,6 @@ def combine_non_unique_frequency_axis_mean(index, data, agg_function=np.mean):
     )
     return data, unique_idxs
 
-
-def add_is_burst_column(tablename):
-    add_new_column_default_value_sql(tablename, "is_burst", "BOOLEAN", "FALSE")
-
-
 def combine_non_unique_frequency_axis(spec, method="mean"):
     """Combine non-unique frequency axis data.
 
@@ -464,36 +444,6 @@ def glob_files(
     return file_paths
 
 
-def extract_constant_meta_data(specs, name):
-    """
-    Extract the constant metadata from the header of multiple spectrograms.
-
-    Parameters:
-        specs (list): List of spectrogram instances to extract metadata from.
-        name (str): Name of the instrument.
-
-    Returns:
-        dict: A dictionary of metadata that is constant between the spectrogram instances.
-
-    """
-    meta_data = {}
-    for spec in specs:
-        for key, value in dict(spec.header).items():
-            key = key.lower()
-            if isinstance(value, str):
-                value = value.strip()
-            if key not in meta_data and value is not None and value != "":
-                meta_data[key] = value
-            else:
-                if meta_data[key] != value:
-                    meta_data[key] = None
-
-    # Drop the keys that are None
-    meta_data = {key: value for key, value in meta_data.items() if value is not None}
-    meta_data["instrument"] = name
-    return meta_data
-
-
 def extract_separate_instruments(paths):
     """Extracts the unique instrument names from a list of file paths."""
     instruments = []
@@ -527,10 +477,6 @@ def create_dict_of_instrument_paths(paths):
         instrument = extract_instrument_name(path)
         instrument_paths[instrument].append(path)
     return instrument_paths
-
-
-def is_table_in_db(table_name):
-    return table_name in get_table_names_sql()
 
 
 def number_list_to_postgresql_compatible_list(names):
@@ -614,11 +560,4 @@ def np_array_to_postgresql_array_with_datetime_index(index, array):
     # Join the strings with a comma to create the final format
     final_format = ",".join(formatted_list)
     return final_format
-
-
-def fill_missing_hours_with_nan(df):
-    new_index = pd.RangeIndex(start=0, stop=24, step=1)
-    df = df.reindex(new_index)
-    df = df.fillna(np.nan)
-    return df
 

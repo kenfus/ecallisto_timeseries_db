@@ -4,7 +4,7 @@ from dash import dcc, html
 from database_functions import timebucket_values_from_database_sql, sql_result_to_df, get_table_names_sql, check_if_table_has_data_between_dates_sql, get_table_names_with_data_between_dates_sql
 from plotting_utils import timedelta_to_sql_timebucket_value
 from ecallisto_ng.plotting.utils import plot_spectogram, fill_missing_timesteps_with_nan
-from ecallisto_ng.data_processing.utils import subtract_rolling_background, elimwrongchannels, subtract_constant_background
+from ecallisto_ng.data_processing.utils import subtract_rolling_background, elimwrongchannels
 import pandas as pd
 from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
