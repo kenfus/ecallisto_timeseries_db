@@ -403,9 +403,23 @@ def values_from_database_sql(
     end_datetime: str,
     columns: List[str] = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
-    chunk_size: int = 20000,  # you can adjust this according to your memory size
+    chunk_size = None,
     **kwargs,
 ):
+    """
+    Returns all values between start and end time in the given table, without any aggregation.
+    """
+    # Type checks
+    if not isinstance(table, str):
+        raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
+    
+    if not table in get_table_names_sql():
+        raise ValueError(f"Table {table} does not exist in the database")
+
+    if columns is not None and not all(isinstance(column, str) for column in columns):
+        raise TypeError("'columns' should be a list of str")
+
+    # Check date
     try:
         parse(start_datetime)
     except ValueError as e:
@@ -414,7 +428,8 @@ def values_from_database_sql(
     try:
         parse(end_datetime)
     except ValueError as e:
-        raise ValueError(f"end_datetime error: {e}")
+        raise ValueError(f"start_datetime error: {e}")
+
     if not isinstance(columns_not_to_select, list) or not all(
         isinstance(column, str) for column in columns_not_to_select
     ):
@@ -424,23 +439,11 @@ def values_from_database_sql(
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]
 
+    # Query
     columns_sql = ",".join(columns)
     query = f"SELECT datetime, {columns_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}'"
 
-    check_query_for_harmful_sql(query)
-
-    with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor(name='server_side_cursor') as cur:  # Use a named cursor to create a server-side cursor
-            cur.itersize = chunk_size  # Set the fetch size
-            cur.execute(query)
-
-            while True:
-                records = cur.fetchmany(chunk_size)
-                if not records:
-                    break
-
-                yield pd.DataFrame(records, columns=["datetime"] + columns)  # yield dataframe directly
-        
+    return _execute_query_for_values(query, columns, chunk_size)  
 
 def timebucket_values_from_database_sql(
     table: str,
@@ -451,7 +454,7 @@ def timebucket_values_from_database_sql(
     agg_function: str = "avg",
     quantile_value: float = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
-    chunk_size: int = 20000,  # you can adjust this according to your memory size
+    chunk_size = None,
     **kwargs,
 ):
     """
@@ -522,22 +525,23 @@ def timebucket_values_from_database_sql(
 
     # Query
     query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
-
+    
+    return _execute_query_for_values(query, columns, chunk_size)
+   
+def _execute_query_for_values(query, columns, chunk_size=None):
+    """
+    Executes the given query and returns the results as a list of dictionaries.
+    """
     # Check the query for harmful SQL
     check_query_for_harmful_sql(query)
 
     with psycopg2.connect(CONNECTION) as conn:
-        with conn.cursor(name='server_side_cursor') as cur:  # Use a named cursor to create a server-side cursor
-            cur.itersize = chunk_size  # Set the fetch size
+        with conn.cursor() as cur:
             cur.execute(query)
-
-            while True:
-                records = cur.fetchmany(chunk_size)
-                if not records:
-                    break
-
-                yield pd.DataFrame(records, columns=["datetime"] + columns)  # yield dataframe directly
-
+            return [
+                dict(zip(["datetime"] + columns, row)) for row in cur.fetchall()
+            ]  # return list of dict
+    
 
 def get_min_max_datetime_from_table_sql(table_name) -> tuple:
     """

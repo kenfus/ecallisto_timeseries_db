@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-
+from pytimeparse import parse
 from database_functions import (
     sql_result_to_df,
     timebucket_values_from_database_sql,
@@ -17,7 +17,8 @@ from database_functions import (
     get_table_names_with_data_between_dates_sql,
     check_if_table_has_data_between_dates_sql,
     get_min_max_datetime_from_table_sql,
-    fetch_data_from_chunks_to_df
+    fetch_data_from_chunks_to_df,
+    get_column_names_sql
 )
 ## To add meta data
 from database_utils import get_table_names_sql, get_last_spectrogram_from_paths_list, instrument_name_to_glob_pattern
@@ -102,12 +103,16 @@ def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
     return {"data_parquet_url": f"/api/data/{file_id}.parquet", "info_json_url": f"/api/data/{file_id}.json", "file_id": file_id, 'meta_data_url': f"/api/data/{file_id}_meta_data.json"}
 
 def get_and_save_data(data_request_dict, file_path_parquet, info_json_url, meta_data_url):
+    size_of_request_mb = calculate_size_of_request(data_request_dict)
+    LOGGER.info(f"Size of request: {size_of_request_mb} MB")
+    
     try:
+        if size_of_request_mb > 50:
+            raise ValueError(f"Request too large. Size of request: {size_of_request_mb} MB. Max size is 50MB.")
         if data_request_dict["timebucket"] and data_request_dict["agg_function"]:
-            data = fetch_data_from_chunks_to_df(timebucket_values_from_database_sql(**data_request_dict))
+            data = timebucket_values_from_database_sql(**data_request_dict)
         else:
-            data = fetch_data_from_chunks_to_df(values_from_database_sql(**data_request_dict))
-
+            data = values_from_database_sql(**data_request_dict)
 
     except ValueError as e:
         LOGGER.error(f"Error in data request: {data_request_dict} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -248,6 +253,33 @@ def get_sha256_from_dict(data: dict) -> str:
     data_string = json.dumps(data, sort_keys=True)  # we use sort_keys to ensure consistent ordering
     return hashlib.sha256(data_string.encode()).hexdigest()
 
+def calculate_size_of_request(data_request_dict):
+    """Calculate the size of the request in MB."""
+    # Calculate the number of columns
+    col_num = len(get_column_names_sql(data_request_dict["table"]))
+    # Calculate the number of seconds in the request
+    start_datetime = datetime.strptime(data_request_dict["start_datetime"], "%Y-%m-%d %H:%M:%S")
+    end_datetime = datetime.strptime(data_request_dict["end_datetime"], "%Y-%m-%d %H:%M:%S")
+    # Calculate the number of seconds in the request
+    time_delta_seconds = (end_datetime - start_datetime).total_seconds()
+    # Calculate the number of rows
+    row_num = time_delta_seconds / timebucket_to_seconds(data_request_dict["timebucket"])
+    # Calculate the size of the request in MB
+    return (col_num * row_num * 8) / 1024 / 1024
+
+
+def timebucket_to_seconds(timebucket: str) -> int:
+    """Convert a timebucket string to seconds."""
+    # Remove all spaces in the string
+    if timebucket is None: # Standard setting is 250ms
+        return 0.25
+    else:
+        timebucket = timebucket.replace(" ", "")
+        if 'ms' in timebucket:
+            return int(timebucket.replace("ms", "")) / 1000
+
+        return parse(timebucket)
+
 async def remove_old_files():
     while True:
         now = datetime.now()
@@ -267,8 +299,6 @@ async def remove_old_files():
 async def startup_event():
     asyncio.create_task(remove_old_files())
     
-
-
 ### Other helping functions
 def return_header_from_newest_spectogram(df, instrument_name):
     """
