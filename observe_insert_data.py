@@ -75,13 +75,13 @@ def monitor_directories(base_path, days_to_check):
 
             if added:
                 added_examples = ', '.join(added[:3]) + ('...' if len(added) > 3 else '')
-                LOGGER.info(f"In {dir} - Added ({len(added)}): {added_examples}")
+                LOGGER.info(f"Added ({len(added)}): {added_examples}")
             if removed:
                 removed_examples = ', '.join(removed[:3]) + ('...' if len(removed) > 3 else '')
-                LOGGER.info(f"In {dir} - Removed ({len(removed)}): {removed_examples}")
+                LOGGER.info(f"Removed ({len(removed)}): {removed_examples}")
             if modified:
                 modified_examples = ', '.join(modified[:3]) + ('...' if len(modified) > 3 else '')
-                LOGGER.info(f"In {dir} - Modified ({len(modified)}): {modified_examples}")
+                LOGGER.info(f"Modified ({len(modified)}): {modified_examples}")
 
             to_add = added + modified
             if to_add:

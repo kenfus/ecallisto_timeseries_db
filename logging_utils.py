@@ -3,7 +3,7 @@ import logging.handlers
 import os
 import sys
 from datetime import datetime
-
+from logging.handlers import RotatingFileHandler
 
 def __create_log_path(log_name):
     """Create a log path from a log directory and log name.
@@ -17,31 +17,26 @@ def __create_log_path(log_name):
         The path to the log file.
     """
 
-    # Path in the working directoy:
+    # Path in the working directory:
     path = os.path.join(
         os.path.abspath(os.path.dirname(__file__)),
         "logs",
-        datetime.now().strftime("%Y-%m-%d"),
-        f"{log_name}_{datetime.now().strftime('%H-%M-%S')}.log",
+        log_name,
+        f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
     )
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 
-
 def setup_custom_logger(name, level=logging.INFO):
     # logger settings
     log_format = "%(asctime)s [%(levelname)s] %(filename)s/%(funcName)s:%(lineno)s >> %(message)s"
 
-    # setup logger with TimedRotatingFileHandler
-    handler = logging.handlers.TimedRotatingFileHandler(
+    # setup logger with RotatingFileHandler
+    handler = RotatingFileHandler(
         __create_log_path(name),
-        when="midnight",
-        backupCount=3,
-        encoding="utf-8",
-        delay=False,
-        utc=False,
-        atTime=datetime.now().time(),
+        maxBytes=10*1024*1024,  # Maximum file size in bytes, e.g., 10MB. Adjust as needed.
+        backupCount=3  # The number of backup files to keep. Adjust as needed.
     )
     handler.setFormatter(logging.Formatter(log_format))
     logger = logging.getLogger(name)
