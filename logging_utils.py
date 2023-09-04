@@ -50,6 +50,10 @@ def setup_custom_logger(name, level=logging.INFO):
 
     return logger
 
+# Create global logger
+main_file_name = os.path.basename(sys.argv[0]).split(".")[0]
+GLOBAL_LOGGER = setup_custom_logger(main_file_name)
+GLOBAL_LOGGER.info(f"Starting {main_file_name}.")
 
 # logger = setup_custom_logger("ecallisto")
 # source: https://docs.python.org/2/howto/logging.html https://stackoverflow.com/questions/37958568/how-to-implement-a-global-python-logger

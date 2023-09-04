@@ -1,4 +1,3 @@
-import logging
 import os
 from glob import glob
 from typing import Union
@@ -20,11 +19,9 @@ from database_functions import (
                                 table_to_hyper_table)
 
 from logging_utils import HiddenPrints
+from logging_utils import GLOBAL_LOGGER as LOGGER
 from spectogram_utils import (masked_spectogram_to_array,
                               spec_time_to_pd_datetime)
-
-LOGGER = logging.getLogger("database_data_addition")
-
 
 def extract_instrument_name(file_path):
     """Extract the instrument name from a file path.
@@ -234,9 +231,8 @@ def add_spec_from_path_to_database(
     """
     if progress is not None:
         progress.value += 1
-
-    with HiddenPrints():  # Hide the download success answer by radiospectra
-        spec = CallistoSpectrogram.read(path, cache=True)
+    #with HiddenPrints():  # Hide the download success answer by radiospectra
+    spec = CallistoSpectrogram.read(path, cache=True)
 
     spec = masked_spectogram_to_array(spec)
     instrument = extract_instrument_name(path)

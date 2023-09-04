@@ -1,10 +1,8 @@
 import os
 import time
 from datetime import datetime, timedelta
-import logging_utils 
+from logging_utils import GLOBAL_LOGGER as LOGGER
 from bulk_load_to_database_between_dates import add_specs_from_paths_to_database
-
-LOGGER = logging_utils.setup_custom_logger("observe_insert_data_tsdb")
 
 def get_files_with_timestamps(path):
     try:
@@ -86,6 +84,8 @@ def monitor_directories(base_path, days_to_check):
             to_add = added + modified
             if to_add:
                 LOGGER.info(f"Adding {len(to_add)} files to the database...")
+                file_names_dates = [f.split('2002-20yy_Callisto/')[-1] for f in to_add]
+                LOGGER.info(f"Files added: {'|'.join(file_names_dates)}")
                 add_specs_from_paths_to_database(to_add)
                 LOGGER.info(f"Done adding {len(to_add)} files to the database.")
 

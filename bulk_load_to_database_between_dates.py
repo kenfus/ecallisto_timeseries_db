@@ -6,17 +6,13 @@ from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
 
-from astropy.utils.data import clear_download_cache
 from tqdm import tqdm
 import pandas as pd
 
-import logging_utils
+from logging_utils import GLOBAL_LOGGER as LOGGER
 from data_creation_utils import get_paths
 from database_functions import get_table_names_sql
 from database_utils import add_spec_from_path_to_database, add_instrument_from_path_to_database, create_dict_of_instrument_paths
-
-LOGGER = logging_utils.setup_custom_logger("database_data_addition")
-
 
 def add_instruments_from_paths_to_database(dict_paths):
     """
@@ -41,7 +37,7 @@ def add_instruments_from_paths_to_database(dict_paths):
                     LOGGER.info(f"Trying next file for {instrument}.")
 
 
-def add_specs_from_paths_to_database(urls, chunk_size=100, cpu_count=os.cpu_count(), replace=False):
+def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False):
     partial_f = partial(add_spec_from_path_to_database, replace=replace)
     with mp.Pool(cpu_count) as pool:
         pool.map_async(
@@ -54,15 +50,11 @@ def add_specs_from_paths_to_database(urls, chunk_size=100, cpu_count=os.cpu_coun
         pool.close()
         pool.join()
 
-    # Clear the cache to avoid memory issues
-    clear_download_cache()
-
-
 def add_data_to_database(
-    start_date: datetime.date = datetime.now().date() - timedelta(days=7),
-    end_date: datetime.date = datetime.now().date(),
-    chunk_size: int = 100,
-    cpu_count: int = os.cpu_count(),
+    start_date,
+    end_date,
+    chunk_size,
+    cpu_count,
 ) -> None:
     """
     Add instrument data to a database.
@@ -126,8 +118,9 @@ def add_data_to_database(
             # Add the dat a to the database
             add_specs_from_paths_to_database(status["path"], chunk_size, cpu_count)
             LOGGER.info(
-                f"Added data for {date}. {days_added} out of {len(dates_to_add)} done."
+                f"Added {len(status['path'])} files for {date}. {days_added} out of {len(dates_to_add)} done."
             )
+
             days_added += 1
         except Exception as e:
             tb_str = traceback.format_exception(
@@ -156,7 +149,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chunk_size",
         type=int,
-        default=100,
+        default=20,
         help="Chunk size for multiprocessing. Default is 100.",
     )
     parser.add_argument(
@@ -166,6 +159,7 @@ if __name__ == "__main__":
         help="Number of CPUs to use. Default is all available CPUs.",
     )
     args = parser.parse_args()
+    # Create logger
     LOGGER.info(f"Adding data from {args.start_date}. Args: {args}")
     try:
         # Main
