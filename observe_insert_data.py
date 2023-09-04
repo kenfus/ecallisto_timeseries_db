@@ -35,7 +35,7 @@ def get_dirs_to_monitor(base_path, days_to_check):
         LOGGER.error(f"Error during fetching directories to monitor: {str(e)}")
         return []
 
-def monitor_directories(base_path, days_to_check):
+def monitor_directories(base_path, days_to_check, cpu_count, chunk_size, replace):
     dirs_to_monitor = get_dirs_to_monitor(base_path, days_to_check)
     prev_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor}
     current_day = datetime.now().date()
@@ -86,7 +86,7 @@ def monitor_directories(base_path, days_to_check):
                 LOGGER.info(f"Adding {len(to_add)} files to the database...")
                 file_names_dates = [f.split('2002-20yy_Callisto/')[-1] for f in to_add]
                 LOGGER.info(f"Files added: {'|'.join(file_names_dates)}")
-                add_specs_from_paths_to_database(to_add)
+                add_specs_from_paths_to_database(to_add, cpu_count=2, chunk_size=20, replace=True)
                 LOGGER.info(f"Done adding {len(to_add)} files to the database.")
 
             prev_state = curr_state
@@ -99,7 +99,10 @@ def monitor_directories(base_path, days_to_check):
 if __name__ == "__main__":
     base_path = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
     days_to_check = 30
+    cpu_count = 2
+    chunk_size = 20
+    replace = True
     try:
-        monitor_directories(base_path, days_to_check)
+        monitor_directories(base_path=base_path, days_to_check=days_to_check, cpu_count=cpu_count, chunk_size=chunk_size, replace=replace)
     except Exception as e:
         LOGGER.error(f"Fatal error during directory monitoring: {str(e)}")
