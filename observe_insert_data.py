@@ -2,7 +2,8 @@ import os
 import time
 from datetime import datetime, timedelta
 from logging_utils import GLOBAL_LOGGER as LOGGER
-from bulk_load_to_database_between_dates import add_specs_from_paths_to_database
+from bulk_load_to_database_between_dates import add_specs_from_paths_to_database, add_instruments_from_paths_to_database
+from database_utils import create_dict_of_instrument_paths
 
 def get_files_with_timestamps(path):
     try:
@@ -35,7 +36,7 @@ def get_dirs_to_monitor(base_path, days_to_check):
         LOGGER.error(f"Error during fetching directories to monitor: {str(e)}")
         return []
 
-def monitor_directories(base_path, days_to_check, cpu_count, chunk_size, replace):
+def monitor_directories(base_path, days_to_check, chunk_size, cpu_count, replace):
     dirs_to_monitor = get_dirs_to_monitor(base_path, days_to_check)
     prev_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor}
     current_day = datetime.now().date()
@@ -86,7 +87,11 @@ def monitor_directories(base_path, days_to_check, cpu_count, chunk_size, replace
                 LOGGER.info(f"Adding {len(to_add)} files to the database...")
                 file_names_dates = [f.split('2002-20yy_Callisto/')[-1] for f in to_add]
                 LOGGER.info(f"Files added: {'|'.join(file_names_dates)}")
-                add_specs_from_paths_to_database(to_add, cpu_count=2, chunk_size=20, replace=True)
+                # Create dictionary paths to create new table if it does not exist
+                dict_paths = create_dict_of_instrument_paths(to_add)
+                # Add the instruments to the database by creating a new table
+                add_instruments_from_paths_to_database(dict_paths)
+                add_specs_from_paths_to_database(to_add, cpu_count=cpu_count, chunk_size=chunk_size, replace=replace)
                 LOGGER.info(f"Done adding {len(to_add)} files to the database.")
 
             prev_state = curr_state
@@ -99,10 +104,10 @@ def monitor_directories(base_path, days_to_check, cpu_count, chunk_size, replace
 if __name__ == "__main__":
     base_path = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
     days_to_check = 30
-    cpu_count = 2
-    chunk_size = 20
-    replace = True
+    cpu_count = os.cpu_count()
+    chunk_size = 100
+    replace = False
     try:
-        monitor_directories(base_path=base_path, days_to_check=days_to_check, cpu_count=cpu_count, chunk_size=chunk_size, replace=replace)
+        monitor_directories(base_path=base_path, days_to_check=days_to_check, chunk_size=chunk_size, cpu_count=cpu_count, replace=replace)
     except Exception as e:
         LOGGER.error(f"Fatal error during directory monitoring: {str(e)}")

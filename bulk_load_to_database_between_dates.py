@@ -94,8 +94,6 @@ def add_data_to_database(
     """
     # Create a list of dates to add to the database
     dates_to_add = pd.date_range(start_date, end_date, freq="D", inclusive="both")
-    # Reverse the list of dates to add to the database
-    dates_to_add = dates_to_add[::-1]
 
     LOGGER.info(f"Found {len(dates_to_add)} days to add to the database.")
     # Add the data to the database
@@ -113,7 +111,7 @@ def add_data_to_database(
             )
             # Check if there are new instruments
             dict_paths = create_dict_of_instrument_paths(status["path"])
-            # Add the instruments to the database
+            # Add the instruments to the database by creating a new table
             add_instruments_from_paths_to_database(dict_paths)
             # Add the dat a to the database
             add_specs_from_paths_to_database(status["path"], chunk_size, cpu_count)
@@ -149,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chunk_size",
         type=int,
-        default=20,
+        default=100,
         help="Chunk size for multiprocessing. Default is 100.",
     )
     parser.add_argument(

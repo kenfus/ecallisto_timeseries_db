@@ -6,9 +6,11 @@ import numpy as np
 import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
 from tqdm import tqdm
+import traceback
 
 from database_functions import (
                                 add_new_column_sql,
+                                drop_column_sql,
                                 create_table_datetime_primary_key_sql,
                                 create_table_sql,
                                 drop_values_between_two_dates_sql,
@@ -22,6 +24,7 @@ from logging_utils import HiddenPrints
 from logging_utils import GLOBAL_LOGGER as LOGGER
 from spectogram_utils import (masked_spectogram_to_array,
                               spec_time_to_pd_datetime)
+from project_config import BLACK_LIST
 
 def extract_instrument_name(file_path):
     """Extract the instrument name from a file path.
@@ -229,57 +232,74 @@ def add_spec_from_path_to_database(
     --------
     >>> add_spec_from_path_to_database('path/to/file.spec')
     """
-    if progress is not None:
-        progress.value += 1
-    #with HiddenPrints():  # Hide the download success answer by radiospectra
-    spec = CallistoSpectrogram.read(path, cache=True)
+    try:
+        if progress is not None:
+            progress.value += 1
+        #with HiddenPrints():  # Hide the download success answer by radiospectra
+        spec = CallistoSpectrogram.read(path, cache=True)
 
-    spec = masked_spectogram_to_array(spec)
-    instrument = extract_instrument_name(path)
+        spec = masked_spectogram_to_array(spec)
+        instrument = extract_instrument_name(path)
+        if instrument in BLACK_LIST:
+            LOGGER.info(f"Skipping {os.path.basename(path)} because it is in the black list")
+            return
 
-    if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
-        LOGGER.warning(
-            f"Warning: {os.path.basename(path)} has non-unique frequency axis"
-        )
-        spec = combine_non_unique_frequency_axis(spec)
-
-    list_frequencies = number_list_to_postgresql_compatible_list(spec.freq_axis)
-    list_frequencies.insert(0, "datetime")
-    if not len(np.setdiff1d(list_frequencies, get_column_names_sql(instrument))) == 0:
-        # LOGGER
-        LOGGER.warning(f"Warning: {os.path.basename(path)} contains new columns")
-        columns_to_add = np.setdiff1d(
-            list_frequencies, get_column_names_sql(instrument)
-        )
-        LOGGER.debug(f"New columns: {columns_to_add}")
-        for column in columns_to_add:
-            add_new_column_sql(instrument, column, "SMALLINT")
-        if len(get_column_names_sql(instrument)) > 1600:
+        if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
             LOGGER.warning(
-                f"Warning: File: {os.path.basename(path)} has above 1600 columns, which could cause performance issues."
+                f"{os.path.basename(path)} has non-unique frequency axis"
             )
+            spec = combine_non_unique_frequency_axis(spec)
 
-    sql_columns = ",".join(list_frequencies)
-    data = np.array(spec.data, dtype=np.int16)
-    if not np.all(data <= 32767):
-        LOGGER.warning(
-            f"Warning: {os.path.basename(path)} has values above 32767. Values will be capped to 32767. If that is not desired, update this error and change the data type in the database to not SMALLINT."
-        )
-        data = np.clip(data, a_min=0, a_max=32767)
-    date_range = spec_time_to_pd_datetime(spec)
-    sql_values = np_array_to_postgresql_array_with_datetime_index(date_range, data)
+        list_frequencies = number_list_to_postgresql_compatible_list(spec.freq_axis)
+        list_frequencies.insert(0, "datetime")
+        if not len(np.setdiff1d(list_frequencies, get_column_names_sql(instrument))) == 0:
+            # LOGGER
+            LOGGER.warning(f"{os.path.basename(path)} contains new columns")
+            columns_to_add = np.setdiff1d(
+                list_frequencies, get_column_names_sql(instrument)
+            )
+            LOGGER.info(f"New columns: {columns_to_add}")
+            columns_to_drop = np.setdiff1d(
+                get_column_names_sql(instrument), list_frequencies
+            )
+            LOGGER.info(f"Dropping columns: {columns_to_drop}")
+            for column in columns_to_drop:
+                drop_column_sql(instrument, column)
 
-    if replace:
-        LOGGER.info(
-            f"Replacing {os.path.basename(path)} in database"
-            f"dropping data between {date_range[0]} and {date_range[-1]}"
-        )
-        drop_values_between_two_dates_sql(
-            instrument,
-            date_range[0].strftime("%Y-%m-%d %H:%M:%S.%f"),
-            date_range[-1].strftime("%Y-%m-%d %H:%M:%S.%f"),
-        )
-    insert_values_sql(instrument, sql_columns, sql_values)
+            for column in columns_to_add:
+                add_new_column_sql(instrument, column, "SMALLINT")
+        
+        # Check number of columns and raise warning if above 600
+        nr_columns = len(get_column_names_sql(instrument))
+        if nr_columns > 600:
+            LOGGER.warning(f"{os.path.basename(path)} contains more than 600 columns ({nr_columns})")
+
+
+        sql_columns = ",".join(list_frequencies)
+        data = np.array(spec.data, dtype=np.int16)
+        if not np.all(data <= 32767):
+            LOGGER.warning(
+                f"{os.path.basename(path)} has values above 32767. Values will be capped to 32767. If that is not desired, update this error and change the data type in the database to not SMALLINT."
+            )
+            data = np.clip(data, a_min=0, a_max=32767)
+        date_range = spec_time_to_pd_datetime(spec)
+        sql_values = np_array_to_postgresql_array_with_datetime_index(date_range, data)
+
+        if replace:
+            LOGGER.info(
+                f"Replacing {os.path.basename(path)} in database"
+                f"dropping data between {date_range[0]} and {date_range[-1]}"
+            )
+            drop_values_between_two_dates_sql(
+                instrument,
+                date_range[0].strftime("%Y-%m-%d %H:%M:%S.%f"),
+                date_range[-1].strftime("%Y-%m-%d %H:%M:%S.%f"),
+            )
+        insert_values_sql(instrument, sql_columns, sql_values)
+    except Exception as e:
+        tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+        tb_str = "".join(tb_str)
+        LOGGER.error(f"Error adding data for {path}: {e}\nTraceback:\n{tb_str}")
 
 
 def add_instrument_from_path_to_database(path):
@@ -308,7 +328,7 @@ def add_instrument_from_path_to_database(path):
     LOGGER.info(f"Adding instrument {instrument} to database")
     if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
         LOGGER.warning(
-            f"Warning: {os.path.basename(path)} has non-unique frequency axis"
+            f"{os.path.basename(path)} has non-unique frequency axis"
         )
         spec = combine_non_unique_frequency_axis(spec)
     sql_columns = numbers_list_to_postgresql_columns_meta_data(

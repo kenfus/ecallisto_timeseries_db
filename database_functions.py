@@ -322,6 +322,19 @@ def add_new_column_sql(table_name, column_name, column_type):
         conn.commit()
         cursor.close()
 
+def drop_column_sql(table_name, column_name):
+    """
+    Drops a column from the given table
+    """
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""ALTER TABLE {table_name}
+                        DROP COLUMN IF EXISTS {column_name};
+                        """
+        )
+        conn.commit()
+        cursor.close()
 
 def get_hypertable_sizes_sql():
     with psycopg2.connect(CONNECTION) as conn:
