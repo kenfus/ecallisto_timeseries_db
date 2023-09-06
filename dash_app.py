@@ -170,4 +170,4 @@ def update_graph(n_clicks, instruments, start_date, end_date):
 
 # Run the app
 if __name__ == '__main__':
-    app.run(debug=False, host='127.0.0.1', port=8050)
+    app.run(debug=False, host='127.0.0.1', port=8051)
