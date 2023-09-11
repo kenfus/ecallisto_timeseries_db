@@ -10,7 +10,9 @@ try:
     import psycopg2
 except ImportError:
     print("psycopg2 not installed, DB functions will not work (which can be ok).")
-from dateutil.parser import parse
+from dateutil.parser import parse as dateutil_parse
+from pytimeparse import parse as pytimeparse_parse
+from logging_utils import GLOBAL_LOGGER as LOGGER
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
@@ -26,7 +28,9 @@ if "PGDATABASE" not in os.environ:
 
 ##
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
-
+# Map between seconds of timebucket and view name
+CONT_AGG_VALUES = [60]
+CONT_AGG_VALUES_VIEW_NAMES = ['1min']
 
 def fill_missing_timesteps_with_nan(df):
     """
@@ -99,7 +103,7 @@ def get_column_names_clean(
     
 
 def sql_result_to_df(
-    result, datetime_col="datetime", columns: list = None, meta_data: dict = None
+    result, columns: list = None, meta_data: dict = None
 ):
     """
     Converts the given result from a SQL query to a pandas DataFrame.
@@ -109,6 +113,13 @@ def sql_result_to_df(
               Alternatively, 'result' could be a DataFrame, in which case it will be processed directly. 
               Each key in the dictionary represents a column name, and the corresponding value represents the data in that column.
               
+              
+    - datetime_col (str, optional): Name of the column to be treated as the datetime. 
+                                     If 'datetime', the function will convert the 'datetime' column to pandas datetime format.
+                                     If 'time', the function will not do any conversion.
+                                     Defaults to 'datetime'.
+
+
     - datetime_col (str, optional): Name of the column to be treated as the datetime. 
                                      If 'datetime', the function will convert the 'datetime' column to pandas datetime format.
                                      If 'time', the function will not do any conversion.
@@ -140,16 +151,18 @@ def sql_result_to_df(
     else:
         columns = result.columns
     df = pd.DataFrame(result)
+    
     # Clean colmns 
     columns = get_column_names_clean(columns)
     df.columns = columns
-    if datetime_col == "datetime":
+    if 'datetime' in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"])
-    elif datetime_col == "time":
-        pass
+        df = df.set_index("datetime")
+    elif 'bucketed_time' in df.columns:
+        df["datetime"] = pd.to_datetime(df["bucketed_time"])
+        df = df.set_index("bucketed_time")
     else:
         raise ValueError("datetime_col must be either 'datetime' or 'time'")
-    df = df.set_index(datetime_col)
     # make columns prettier if possible by removing trailing 0s.
     df.columns = [
         col if col != "0" else "0."
@@ -299,7 +312,7 @@ def get_table_names_with_data_between_dates_sql(start_date, end_date):
         
     return tables_with_data
 
-def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date):
+def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date, datetime_col = "datetime"):
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -307,7 +320,7 @@ def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date):
             SELECT EXISTS (
                 SELECT 1
                 FROM {table_name}
-                WHERE datetime BETWEEN '{start_date}' AND '{end_date}'
+                WHERE {datetime_col} BETWEEN '{start_date}' AND '{end_date}'
                 LIMIT 1
             );
             """
@@ -407,7 +420,7 @@ def get_column_names_sql(table_name):
         tuple_list = [tup[0] for tup in tuple_list]
         tuple_list = sort_column_names(tuple_list)
         tuple_list = [
-            f'"{tup}"' if tup not in ["datetime", "burst_type"] else tup
+            f'"{tup}"' if tup not in ["datetime", "bucketed_time", "burst_type"] else tup
             for tup in tuple_list
         ]
         return tuple_list
@@ -458,12 +471,12 @@ def values_from_database_sql(
 
     # Check date
     try:
-        parse(start_datetime)
+        dateutil_parse(start_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
     
     try:
-        parse(end_datetime)
+        dateutil_parse(end_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
 
@@ -482,12 +495,38 @@ def values_from_database_sql(
 
     return _execute_query_for_values(query, columns, chunk_size)
 
-def create_view_name_aggregation(table_name, timebucket, agg_function):
-    view_name = f"{table_name}_{timebucket.replace(' ', '_')}_{agg_function}"
+def timedelta_to_sql_timebucket_value(timedelta):
+    # Convert to seconds
+    seconds = timedelta.total_seconds()
+
+    # Convert to SQL-compatible value
+    if seconds >= 86400:  # More than 1 day
+        days = seconds / 86400
+        sql_value = f"{int(days)} d" if days.is_integer() else f"{days:.1f} d"
+    elif seconds >= 3600:  # More than 1 hour
+        hours = seconds / 3600
+        sql_value = f"{int(hours)} h" if hours.is_integer() else f"{hours:.1f} h"
+    elif seconds >= 60:  # More than 1 minute
+        minutes = seconds / 60
+        sql_value = (
+            f"{int(minutes)} min" if minutes.is_integer() else f"{minutes:.1f} min"
+        )
+    else:
+        sql_value = f"{int(seconds)} s"
+
+    return sql_value
+
+def create_view_name_aggregation(table_name, timebucket, agg_function, values_seconds: list[int] = CONT_AGG_VALUES):
+    timebucket_seconds = timebucket_string_to_seconds(timebucket)
+    # Check which view to use
+    for i, value in enumerate(values_seconds):
+        if timebucket_seconds >= value:
+            timebucket = CONT_AGG_VALUES_VIEW_NAMES[i]
+    view_name = f"{table_name}_{timebucket.replace(' ', '')}_{agg_function}"
     view_name = view_name.lower()
     return view_name
 
-def timebucket_to_seconds(timebucket: str) -> int:
+def timebucket_string_to_seconds(timebucket: str) -> int:
     """Convert a timebucket string to seconds."""
     # Remove all spaces in the string
     if timebucket is None: # Standard setting is 250ms
@@ -497,19 +536,18 @@ def timebucket_to_seconds(timebucket: str) -> int:
         if 'ms' in timebucket:
             return int(timebucket.replace("ms", "")) / 1000
 
-        return parse(timebucket)
+        return pytimeparse_parse(timebucket)
     
-def round_timebucket_to_closest_seconds(timebucket: str, values_seconds: list[int] = [0.25, 60]) -> str:
-    seconds = timebucket_to_seconds(timebucket)
+def round_timebucket_to_closest_seconds(timebucket: str, values_seconds: list[int] = CONT_AGG_VALUES) -> str:
+    seconds = timebucket_string_to_seconds(timebucket)
     closest_value = min(values_seconds, key=lambda x:abs(x-seconds))
-    return f"{closest_value}s"
+    return f"{closest_value} s"
 
 def create_continuous_aggregate_sql(
     table: str,
     view_name: Optional[str] = None,
     timebucket: str = "1 minute",
     agg_function: str = "MAX",
-    schedule_interval: str = "15 minutes",
     exclude_columns: List[str] = ["datetime", "burst_type"],
     **kwargs,
 ):
@@ -545,20 +583,20 @@ def create_continuous_aggregate_sql(
         return None
 
     agg_columns_sql = ",".join(
-        [f"{agg_function}({column})::smallint AS {column}" for column in columns]
+        [f"{agg_function}({column}) AS {column}" for column in columns]
     )
 
     # Create continuous aggregate query
     query = f"""
     CREATE MATERIALIZED VIEW {view_name} WITH (timescaledb.continuous) AS
-    SELECT time_bucket(INTERVAL '{timebucket}', datetime) AS time,
+    SELECT time_bucket(INTERVAL '{timebucket}', datetime) AS bucketed_time,
            {agg_columns_sql}
     FROM {table}
-    GROUP BY time
+    GROUP BY bucketed_time
     WITH NO DATA;
     """
-    
     _execute_query(query, check_query=False)
+    return view_name
 
 def remove_policy_sql(view_name):
     remove_query = f"""
@@ -610,7 +648,8 @@ def timebucket_values_from_database_sql(
     timebucket: str = "1H",
     agg_function: str = "avg",
     quantile_value: float = None,
-    columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    columns_not_to_select: List[str] = ["datetime", "bucketed_time", "burst_type"],
+    datetime_col = "datetime",
     preaggregated: bool = True,
     chunk_size = None,
     **kwargs,
@@ -630,12 +669,12 @@ def timebucket_values_from_database_sql(
 
     # Check date
     try:
-        parse(start_datetime)
+        dateutil_parse(start_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
     
     try:
-        parse(end_datetime)
+        dateutil_parse(end_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
 
@@ -645,9 +684,9 @@ def timebucket_values_from_database_sql(
             f"'timebucket' should be in the form <value><unit>, got {timebucket}"
         )
 
-    if agg_function not in {"MIN", "MAX", "AVG"}:
+    if agg_function not in {"MIN", "MAX"}:
         raise ValueError(
-            f"'agg_function' should be one of 'MIN', 'MAX', 'AVG'. Got {agg_function}"
+            f"'agg_function' should be one of 'MIN', 'MAX'. Got {agg_function}"
         )
 
     if not isinstance(columns_not_to_select, list) or not all(
@@ -663,22 +702,29 @@ def timebucket_values_from_database_sql(
         # If preaggrated yes, check if the table exists
         timebucket = round_timebucket_to_closest_seconds(timebucket)
         # Logic to select the correct view
-        if timebucket is not None and timebucket != "0.25s":
+        if timebucket is not None and timebucket != "0.25 s":
             view_name = create_view_name_aggregation(table, timebucket, agg_function)
         else:
             view_name = table
         # Check that the table actually exists
         if not (view_name in get_view_names_sql() or view_name in get_table_names_sql()):
-            print(f"View {view_name} does not exist")
+            LOGGER.info(f"View {view_name} does not exist in the database")
+        # And that is has the data
+        elif not check_if_table_has_data_between_dates_sql(view_name, start_datetime, end_datetime, datetime_col='bucketed_time'):
+            LOGGER.info(f"View {view_name} has no data between {start_datetime} and {end_datetime}")
         else:
             table = view_name
+            datetime_col = "bucketed_time"
+            LOGGER.info(f"Using view {view_name} with timebucket {timebucket}")
+
+    LOGGER.info(f"Using table {table}")
             
     if not columns:
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]
 
     if agg_function == "quantile" and quantile_value is None:
-        raise ValueError(
+        LOGGER.error(
             "quantile_value must be specified when using agg_function 'quantile'"
         )
 
@@ -695,9 +741,9 @@ def timebucket_values_from_database_sql(
         )
 
     # Query
-    query = f"SELECT time_bucket('{timebucket}', datetime) AS time, {agg_function_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
+    query = f"SELECT time_bucket('{timebucket}', {datetime_col}) AS time, {agg_function_sql} FROM {table} WHERE {datetime_col} BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
     
-    return _execute_query_for_values(query, columns, chunk_size)
+    return _execute_query_for_values(query, columns, chunk_size=chunk_size)
    
 def _execute_query_for_values(query, columns, chunk_size=None):
     """

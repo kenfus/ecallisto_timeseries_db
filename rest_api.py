@@ -17,7 +17,7 @@ from database_functions import (
     check_if_table_has_data_between_dates_sql,
     get_min_max_datetime_from_table_sql,
     get_column_names_sql,
-    timebucket_to_seconds
+    timebucket_string_to_seconds
 )
 ## To add meta data
 from database_utils import get_table_names_sql, get_last_spectrogram_from_paths_list, instrument_name_to_glob_pattern
@@ -264,7 +264,7 @@ def calculate_size_of_request(data_request_dict):
     # Calculate the number of seconds in the request
     time_delta_seconds = (end_datetime - start_datetime).total_seconds()
     # Calculate the number of rows
-    row_num = time_delta_seconds / timebucket_to_seconds(data_request_dict["timebucket"])
+    row_num = time_delta_seconds / timebucket_string_to_seconds(data_request_dict["timebucket"])
     # Calculate the size of the request in MB
     return (col_num * row_num * 8) / 1024 / 1024
 
