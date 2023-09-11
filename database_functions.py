@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -236,7 +236,18 @@ def drop_table_sql(table_name):
         conn.commit()
         cursor.close()
 
-
+def drop_materialized_view_sql(view_name):
+    """
+    Drops a materialized view from the database if it exists
+    """
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""DROP MATERIALIZED VIEW IF EXISTS {view_name};
+                        """
+        )
+        conn.commit()
+        cursor.close()
 
 def get_table_names_sql():
     with psycopg2.connect(CONNECTION) as conn:
@@ -456,7 +467,81 @@ def values_from_database_sql(
     columns_sql = ",".join(columns)
     query = f"SELECT datetime, {columns_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}'"
 
-    return _execute_query_for_values(query, columns, chunk_size)  
+    return _execute_query_for_values(query, columns, chunk_size)
+
+
+def create_continuous_aggregate_sql(
+    table: str,
+    view_name: Optional[str] = None,
+    timebucket: str = "1 minute",
+    agg_function: str = "MAX",
+    schedule_interval: str = "15 minutes",
+    exclude_columns: List[str] = ["datetime", "burst_type"],
+    **kwargs,
+):
+    """
+    Create a continuous aggregate materialized view for the specified table.
+    """
+    
+    # Check if table exists
+    if table not in get_table_names_sql():
+        raise ValueError(f"Table {table} does not exist in the database")
+
+    if agg_function not in ["MAX", "MIN"]:
+        raise ValueError(f"Invalid aggregation function: {agg_function}")
+    
+    if view_name is None:
+        view_name = f"{table}_{timebucket.replace(' ', '_')}_{agg_function}"
+
+    pattern = r"^\d+(\.\d+)?\D+$"
+    if not re.match(pattern, timebucket):
+        raise TypeError(
+            f"'timebucket' should be in the form <value><unit>, got {timebucket}"
+        )
+
+    columns = get_column_names_sql(table)
+    columns = [column for column in columns if column not in exclude_columns]
+
+    agg_columns_sql = ",".join(
+        [f"{agg_function}({column}) AS {column}" for column in columns]
+    )
+
+    # Create continuous aggregate query
+    query = f"""
+    CREATE MATERIALIZED VIEW {view_name} WITH (timescaledb.continuous) AS
+    SELECT time_bucket(INTERVAL '{timebucket}', datetime) AS time,
+           {agg_columns_sql}
+    FROM {table}
+    GROUP BY time
+    WITH NO DATA;
+    """
+    
+    _execute_query(query, check_query=False)
+
+    if schedule_interval:
+        policy_query = f"""
+        SELECT add_continuous_aggregate_policy('{view_name}',
+                                                start_offset => NULL,
+                                                end_offset => NULL,
+                                                schedule_interval => INTERVAL '{schedule_interval}');
+        """
+        _execute_query(policy_query, check_query=False)
+
+def refresh_continuous_aggregate(table_name):
+    query = f"CALL refresh_continuous_aggregate('{table_name}', NULL, NULL);"
+    _execute_query(query, check_query=False)
+
+def _execute_query(query: str, check_query: bool = True):
+    """
+    Executes the given query.
+    """
+    # Check the query for harmful SQL
+    if check_query:
+        check_query_for_harmful_sql(query)
+
+    with psycopg2.connect(CONNECTION) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
 
 def timebucket_values_from_database_sql(
     table: str,

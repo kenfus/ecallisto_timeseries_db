@@ -17,7 +17,6 @@ from database_functions import (
     get_table_names_with_data_between_dates_sql,
     check_if_table_has_data_between_dates_sql,
     get_min_max_datetime_from_table_sql,
-    fetch_data_from_chunks_to_df,
     get_column_names_sql
 )
 ## To add meta data
@@ -85,8 +84,7 @@ def get_data(background_tasks: BackgroundTasks, data_request: DataRequest):
     info_json_url = f"data/{file_id}.json"
     file_path_parquet = f"data/{file_id}.parquet"
     meta_data_url = f"data/{file_id}_meta_data.json"
-
-
+    
     # Create json with information that we are processing the request
     with open(info_json_url, "w") as f:
         json.dump({"status": "processing"}, f)
@@ -185,6 +183,7 @@ class TableDataCheckRequest(BaseModel):
 def check_table_data_availability(request: TableDataCheckRequest):
     LOGGER.info(f"Checking data availability for table: {request.instrument_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     has_data = check_if_table_has_data_between_dates_sql(request.instrument_name, request.start_datetime, request.end_datetime)
+    LOGGER.info(f"Table: {request.instrument_name} has data: {has_data}")
     return {"instrument_name": request.instrument_name, "has_data": has_data}
 
 
@@ -221,31 +220,33 @@ def get_min_max_datetime(request: TableNameRequest):
 @app.get("/api/data/{file_id}.json")
 def get_json(file_id: str):
     file_path = f"data/{file_id}.json"
-    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
+        LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         with open(file_path, "r") as file:
             return json.load(file)
     else:
+        LOGGER.info(f"Data request: {file_id} not found at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         raise HTTPException(status_code=204, detail="File not found.")
 
 @app.get("/api/data/{file_id}_meta_data.json")
 def get_json(file_id: str):
     file_path = f"data/{file_id}_meta_data.json"
-    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
+            LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
             return json.load(file)
     else:
+        LOGGER.info(f"Data request: {file_id} not found at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         raise HTTPException(status_code=204, detail="File not found.")
     
 @app.get("/api/data/{file_id}.parquet")
 def get_parquet(file_id: str):
     file_path = f"data/{file_id}.parquet"
-    LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(file_path)
     if os.path.exists(file_path):
+        LOGGER.info(f"Delivering data request: {file_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         return StreamingResponse(open(file_path, "rb"), media_type="application/octet-stream")
     else:
+        LOGGER.info(f"Data request: {file_id} not found at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         raise HTTPException(status_code=204, detail="File not found. Check the JSON for errors.")
     
 def get_sha256_from_dict(data: dict) -> str:
