@@ -263,6 +263,19 @@ def get_table_names_sql():
         tuple_list = cursor.fetchall()
         return [tup[0] for tup in tuple_list]
 
+def get_view_names_sql():
+    with psycopg2.connect(CONNECTION) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT table_name
+                       FROM information_schema.tables
+                       WHERE table_schema='public'
+                       AND table_type='VIEW';
+                       """
+        )
+
+        tuple_list = cursor.fetchall()
+        return [tup[0] for tup in tuple_list]
 
 def get_table_names_with_data_between_dates_sql(start_date, end_date):
     table_names = get_table_names_sql()
@@ -469,6 +482,27 @@ def values_from_database_sql(
 
     return _execute_query_for_values(query, columns, chunk_size)
 
+def create_view_name_aggregation(table_name, timebucket, agg_function):
+    view_name = f"{table_name}_{timebucket.replace(' ', '_')}_{agg_function}"
+    view_name = view_name.lower()
+    return view_name
+
+def timebucket_to_seconds(timebucket: str) -> int:
+    """Convert a timebucket string to seconds."""
+    # Remove all spaces in the string
+    if timebucket is None: # Standard setting is 250ms
+        return 0.25
+    else:
+        timebucket = timebucket.replace(" ", "").lower()
+        if 'ms' in timebucket:
+            return int(timebucket.replace("ms", "")) / 1000
+
+        return parse(timebucket)
+    
+def round_timebucket_to_closest_seconds(timebucket: str, values_seconds: list[int] = [0.25, 60]) -> str:
+    seconds = timebucket_to_seconds(timebucket)
+    closest_value = min(values_seconds, key=lambda x:abs(x-seconds))
+    return f"{closest_value}s"
 
 def create_continuous_aggregate_sql(
     table: str,
@@ -491,7 +525,11 @@ def create_continuous_aggregate_sql(
         raise ValueError(f"Invalid aggregation function: {agg_function}")
     
     if view_name is None:
-        view_name = f"{table}_{timebucket.replace(' ', '_')}_{agg_function}"
+        view_name = create_view_name_aggregation(table, timebucket, agg_function)
+
+    if view_name in get_view_names_sql():
+        print(f"View {view_name} already exists")
+        return None
 
     pattern = r"^\d+(\.\d+)?\D+$"
     if not re.match(pattern, timebucket):
@@ -502,8 +540,12 @@ def create_continuous_aggregate_sql(
     columns = get_column_names_sql(table)
     columns = [column for column in columns if column not in exclude_columns]
 
+    if len(columns) == 0:
+        print(f"Table {table} has no columns to aggregate")
+        return None
+
     agg_columns_sql = ",".join(
-        [f"{agg_function}({column}) AS {column}" for column in columns]
+        [f"{agg_function}({column})::smallint AS {column}" for column in columns]
     )
 
     # Create continuous aggregate query
@@ -552,6 +594,7 @@ def timebucket_values_from_database_sql(
     agg_function: str = "avg",
     quantile_value: float = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
+    preaggregated: bool = True,
     chunk_size = None,
     **kwargs,
 ):
@@ -585,9 +628,9 @@ def timebucket_values_from_database_sql(
             f"'timebucket' should be in the form <value><unit>, got {timebucket}"
         )
 
-    if agg_function not in {"MIN", "MAX", "AVG", "MEDIAN"}:
+    if agg_function not in {"MIN", "MAX", "AVG"}:
         raise ValueError(
-            f"'agg_function' should be one of 'MIN', 'MAX', 'AVG', 'MEDIAN'. Got {agg_function}"
+            f"'agg_function' should be one of 'MIN', 'MAX', 'AVG'. Got {agg_function}"
         )
 
     if not isinstance(columns_not_to_select, list) or not all(
@@ -599,7 +642,20 @@ def timebucket_values_from_database_sql(
         raise TypeError(
             f"'quantile_value' should be of float type, got {type(quantile_value).__name__}"
         )
-
+    if preaggregated:
+        # If preaggrated yes, check if the table exists
+        timebucket = round_timebucket_to_closest_seconds(timebucket)
+        # Logic to select the correct view
+        if timebucket is not None and timebucket != "0.25s":
+            view_name = create_view_name_aggregation(table, timebucket, agg_function)
+        else:
+            view_name = table
+        # Check that the table actually exists
+        if not (view_name in get_view_names_sql() or view_name in get_table_names_sql()):
+            print(f"View {view_name} does not exist")
+        else:
+            table = view_name
+            
     if not columns:
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]

@@ -9,7 +9,6 @@ from fastapi import HTTPException
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from pytimeparse import parse
 from database_functions import (
     sql_result_to_df,
     timebucket_values_from_database_sql,
@@ -17,7 +16,8 @@ from database_functions import (
     get_table_names_with_data_between_dates_sql,
     check_if_table_has_data_between_dates_sql,
     get_min_max_datetime_from_table_sql,
-    get_column_names_sql
+    get_column_names_sql,
+    timebucket_to_seconds
 )
 ## To add meta data
 from database_utils import get_table_names_sql, get_last_spectrogram_from_paths_list, instrument_name_to_glob_pattern
@@ -268,18 +268,6 @@ def calculate_size_of_request(data_request_dict):
     # Calculate the size of the request in MB
     return (col_num * row_num * 8) / 1024 / 1024
 
-
-def timebucket_to_seconds(timebucket: str) -> int:
-    """Convert a timebucket string to seconds."""
-    # Remove all spaces in the string
-    if timebucket is None: # Standard setting is 250ms
-        return 0.25
-    else:
-        timebucket = timebucket.replace(" ", "")
-        if 'ms' in timebucket:
-            return int(timebucket.replace("ms", "")) / 1000
-
-        return parse(timebucket)
 
 async def remove_old_files():
     while True:
