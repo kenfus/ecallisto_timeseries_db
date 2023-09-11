@@ -560,14 +560,31 @@ def create_continuous_aggregate_sql(
     
     _execute_query(query, check_query=False)
 
-    if schedule_interval:
-        policy_query = f"""
+def remove_policy_sql(view_name):
+    remove_query = f"""
+    SELECT remove_continuous_aggregate_policy('{view_name}');
+    """
+    _execute_query(remove_query, check_query=False)
+
+def add_continuous_aggregate_policy_sql(
+    view_name: str,
+    schedule_interval: str = "15 minutes",
+    start_offset: str = None,
+    end_offset: str = None,
+    **kwargs,
+):
+    # Convert None values to SQL NULL without quotes
+    start_offset = 'NULL' if start_offset is None else f"'{start_offset}'"
+    end_offset = 'NULL' if end_offset is None else f"'{end_offset}'"
+
+    policy_query = f"""
         SELECT add_continuous_aggregate_policy('{view_name}',
-                                                start_offset => NULL,
-                                                end_offset => NULL,
+                                                start_offset => {start_offset},
+                                                end_offset => {end_offset},
                                                 schedule_interval => INTERVAL '{schedule_interval}');
         """
-        _execute_query(policy_query, check_query=False)
+    _execute_query(policy_query, check_query=False)
+
 
 def refresh_continuous_aggregate(table_name):
     query = f"CALL refresh_continuous_aggregate('{table_name}', NULL, NULL);"
