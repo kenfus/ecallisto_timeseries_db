@@ -105,8 +105,8 @@ def get_and_save_data(data_request_dict, file_path_parquet, info_json_url, meta_
     LOGGER.info(f"Size of request: {size_of_request_mb} MB")
     
     try:
-        if size_of_request_mb > 50:
-            raise ValueError(f"Request too large. Size of request: {size_of_request_mb} MB. Max size is 50MB.")
+        if size_of_request_mb > 200:
+            raise ValueError(f"Request too large. Size of request: {size_of_request_mb} MB. Max size is 200MB.")
         if data_request_dict["timebucket"] and data_request_dict["agg_function"]:
             data = timebucket_values_from_database_sql(**data_request_dict)
         else:
