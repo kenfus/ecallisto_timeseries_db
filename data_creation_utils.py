@@ -14,6 +14,7 @@ LOCAL_DATA_FOLDER = os.path.join(os.path.abspath(os.sep), "var", "lib", "ecallis
 FILES_LOCAL_PATH = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
 MIN_FILE_SIZE = 2000  # Minimum file size in bytes, to redownload empty files
 
+
 def get_paths(
     start_date, end_date, instrument_regexr_pattern=None, dir=FILES_LOCAL_PATH
 ):

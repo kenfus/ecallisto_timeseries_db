@@ -30,7 +30,8 @@ if "PGDATABASE" not in os.environ:
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
 # Map between seconds of timebucket and view name
 CONT_AGG_VALUES = [60]
-CONT_AGG_VALUES_VIEW_NAMES = ['1min']
+CONT_AGG_VALUES_VIEW_NAMES = ["1min"]
+
 
 def fill_missing_timesteps_with_nan(df):
     """
@@ -78,6 +79,7 @@ def fill_missing_timesteps_with_nan(df):
     df = df.reindex(new_index)
     return df
 
+
 def get_column_names_clean(
     column_names, columns_to_drop=["burst_type"], columns_to_add=[]
 ):
@@ -100,45 +102,43 @@ def get_column_names_clean(
         for column in columns_to_add:
             column_names.insert(0, column)
     return column_names
-    
 
-def sql_result_to_df(
-    result, columns: list = None, meta_data: dict = None
-):
+
+def sql_result_to_df(result, columns: list = None, meta_data: dict = None):
     """
     Converts the given result from a SQL query to a pandas DataFrame.
-    
+
     Parameters:
-    - result: The result obtained from a SQL query. This could be a list of dictionaries, where each dictionary represents a row of data. 
-              Alternatively, 'result' could be a DataFrame, in which case it will be processed directly. 
+    - result: The result obtained from a SQL query. This could be a list of dictionaries, where each dictionary represents a row of data.
+              Alternatively, 'result' could be a DataFrame, in which case it will be processed directly.
               Each key in the dictionary represents a column name, and the corresponding value represents the data in that column.
-              
-              
-    - datetime_col (str, optional): Name of the column to be treated as the datetime. 
+
+
+    - datetime_col (str, optional): Name of the column to be treated as the datetime.
                                      If 'datetime', the function will convert the 'datetime' column to pandas datetime format.
                                      If 'time', the function will not do any conversion.
                                      Defaults to 'datetime'.
 
 
-    - datetime_col (str, optional): Name of the column to be treated as the datetime. 
+    - datetime_col (str, optional): Name of the column to be treated as the datetime.
                                      If 'datetime', the function will convert the 'datetime' column to pandas datetime format.
                                      If 'time', the function will not do any conversion.
                                      Defaults to 'datetime'.
 
-    - columns (list, optional): List of column names for the resulting DataFrame. 
+    - columns (list, optional): List of column names for the resulting DataFrame.
                                 If not specified, the function will attempt to infer the column names from the 'result' input.
                                 If 'result' is a list of dictionaries, the function will use the keys of the dictionaries as column names.
                                 If 'result' is something else (e.g., a list of lists), the function will generate default column names.
 
-    - meta_data (dict, optional): Dictionary containing metadata for the DataFrame. 
+    - meta_data (dict, optional): Dictionary containing metadata for the DataFrame.
                                   Each key-value pair in the dictionary will be stored in the DataFrame's 'attrs' attribute.
                                   This can be used to attach additional information to the DataFrame.
                                   For example, 'meta_data' might contain information about when and how the data was collected.
 
     Returns:
-    - df (pandas.DataFrame): DataFrame containing the data from 'result'. The DataFrame's index will be set to the datetime column, 
+    - df (pandas.DataFrame): DataFrame containing the data from 'result'. The DataFrame's index will be set to the datetime column,
                              and any columns that only contain NaN values will be dropped.
-                             
+
     Raises:
     - ValueError: If 'datetime_col' is not 'datetime' or 'time'.
     """
@@ -151,14 +151,14 @@ def sql_result_to_df(
     else:
         columns = result.columns
     df = pd.DataFrame(result)
-    
-    # Clean colmns 
+
+    # Clean colmns
     columns = get_column_names_clean(columns)
     df.columns = columns
-    if 'datetime' in df.columns:
+    if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"])
         df = df.set_index("datetime")
-    elif 'bucketed_time' in df.columns:
+    elif "bucketed_time" in df.columns:
         df["datetime"] = pd.to_datetime(df["bucketed_time"])
         df = df.set_index("bucketed_time")
     else:
@@ -173,8 +173,9 @@ def sql_result_to_df(
             df.attrs[key] = value
     return df.dropna(how="all", axis=1)
 
+
 def fetch_data_from_chunks_to_df(
-        chunks,
+    chunks,
 ):
     # Initialize an empty DataFrame
     final_df = pd.DataFrame()
@@ -182,7 +183,7 @@ def fetch_data_from_chunks_to_df(
     # Iterate over the chunks of results
     for chunk in chunks:
         # Do any necessary processing on the chunk...
-        
+
         # Append the DataFrame to the final_df
         final_df = pd.concat([final_df, chunk])
 
@@ -249,6 +250,7 @@ def drop_table_sql(table_name):
         conn.commit()
         cursor.close()
 
+
 def drop_materialized_view_sql(view_name):
     """
     Drops a materialized view from the database if it exists
@@ -261,6 +263,7 @@ def drop_materialized_view_sql(view_name):
         )
         conn.commit()
         cursor.close()
+
 
 def get_table_names_sql():
     with psycopg2.connect(CONNECTION) as conn:
@@ -276,6 +279,7 @@ def get_table_names_sql():
         tuple_list = cursor.fetchall()
         return [tup[0] for tup in tuple_list]
 
+
 def get_view_names_sql():
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
@@ -289,6 +293,7 @@ def get_view_names_sql():
 
         tuple_list = cursor.fetchall()
         return [tup[0] for tup in tuple_list]
+
 
 def get_table_names_with_data_between_dates_sql(start_date, end_date):
     table_names = get_table_names_sql()
@@ -309,10 +314,13 @@ def get_table_names_with_data_between_dates_sql(start_date, end_date):
             has_data = cursor.fetchone()[0]
             if has_data:
                 tables_with_data.append(table_name)
-        
+
     return tables_with_data
 
-def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date, datetime_col = "datetime"):
+
+def check_if_table_has_data_between_dates_sql(
+    table_name, start_date, end_date, datetime_col="datetime"
+):
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -327,7 +335,8 @@ def check_if_table_has_data_between_dates_sql(table_name, start_date, end_date, 
         )
         has_data = cursor.fetchone()[0]
         return has_data
-    
+
+
 def add_new_column_default_value_sql(
     table_name, column_name, column_type, default_value
 ):
@@ -359,6 +368,7 @@ def add_new_column_sql(table_name, column_name, column_type):
         conn.commit()
         cursor.close()
 
+
 def drop_column_sql(table_name, column_name):
     """
     Drops a column from the given table
@@ -372,6 +382,7 @@ def drop_column_sql(table_name, column_name):
         )
         conn.commit()
         cursor.close()
+
 
 def get_hypertable_sizes_sql():
     with psycopg2.connect(CONNECTION) as conn:
@@ -420,7 +431,9 @@ def get_column_names_sql(table_name):
         tuple_list = [tup[0] for tup in tuple_list]
         tuple_list = sort_column_names(tuple_list)
         tuple_list = [
-            f'"{tup}"' if tup not in ["datetime", "bucketed_time", "burst_type"] else tup
+            f'"{tup}"'
+            if tup not in ["datetime", "bucketed_time", "burst_type"]
+            else tup
             for tup in tuple_list
         ]
         return tuple_list
@@ -445,7 +458,7 @@ def get_rolling_mean_sql(table, start_time, end_time, timebucket="1H"):
             lambda x: datetime.strptime(x, "%Y-%m-%d %H:%M:%S")
         )
         return df
-    
+
 
 def values_from_database_sql(
     table: str,
@@ -453,7 +466,7 @@ def values_from_database_sql(
     end_datetime: str,
     columns: List[str] = None,
     columns_not_to_select: List[str] = ["datetime", "burst_type"],
-    chunk_size = None,
+    chunk_size=None,
     **kwargs,
 ):
     """
@@ -462,7 +475,7 @@ def values_from_database_sql(
     # Type checks
     if not isinstance(table, str):
         raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
-    
+
     if not table in get_table_names_sql():
         raise ValueError(f"Table {table} does not exist in the database")
 
@@ -474,7 +487,7 @@ def values_from_database_sql(
         dateutil_parse(start_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
-    
+
     try:
         dateutil_parse(end_datetime)
     except ValueError as e:
@@ -494,6 +507,7 @@ def values_from_database_sql(
     query = f"SELECT datetime, {columns_sql} FROM {table} WHERE datetime BETWEEN '{start_datetime}' AND '{end_datetime}'"
 
     return _execute_query_for_values(query, columns, chunk_size)
+
 
 def timedelta_to_sql_timebucket_value(timedelta):
     # Convert to seconds
@@ -516,7 +530,10 @@ def timedelta_to_sql_timebucket_value(timedelta):
 
     return sql_value
 
-def create_view_name_aggregation(table_name, timebucket, agg_function, values_seconds: list[int] = CONT_AGG_VALUES):
+
+def create_view_name_aggregation(
+    table_name, timebucket, agg_function, values_seconds: list[int] = CONT_AGG_VALUES
+):
     timebucket_seconds = timebucket_string_to_seconds(timebucket)
     # Check which view to use
     for i, value in enumerate(values_seconds):
@@ -526,22 +543,27 @@ def create_view_name_aggregation(table_name, timebucket, agg_function, values_se
     view_name = view_name.lower()
     return view_name
 
+
 def timebucket_string_to_seconds(timebucket: str) -> int:
     """Convert a timebucket string to seconds."""
     # Remove all spaces in the string
-    if timebucket is None: # Standard setting is 250ms
+    if timebucket is None:  # Standard setting is 250ms
         return 0.25
     else:
         timebucket = timebucket.replace(" ", "").lower()
-        if 'ms' in timebucket:
+        if "ms" in timebucket:
             return int(timebucket.replace("ms", "")) / 1000
 
         return pytimeparse_parse(timebucket)
-    
-def round_timebucket_to_closest_seconds(timebucket: str, values_seconds: list[int] = CONT_AGG_VALUES) -> str:
+
+
+def round_timebucket_to_closest_seconds(
+    timebucket: str, values_seconds: list[int] = CONT_AGG_VALUES
+) -> str:
     seconds = timebucket_string_to_seconds(timebucket)
-    closest_value = min(values_seconds, key=lambda x:abs(x-seconds))
+    closest_value = min(values_seconds, key=lambda x: abs(x - seconds))
     return f"{closest_value} s"
+
 
 def create_continuous_aggregate_sql(
     table: str,
@@ -554,14 +576,14 @@ def create_continuous_aggregate_sql(
     """
     Create a continuous aggregate materialized view for the specified table.
     """
-    
+
     # Check if table exists
     if table not in get_table_names_sql():
         raise ValueError(f"Table {table} does not exist in the database")
 
     if agg_function not in ["MAX", "MIN"]:
         raise ValueError(f"Invalid aggregation function: {agg_function}")
-    
+
     if view_name is None:
         view_name = create_view_name_aggregation(table, timebucket, agg_function)
 
@@ -598,11 +620,13 @@ def create_continuous_aggregate_sql(
     _execute_query(query, check_query=False)
     return view_name
 
+
 def remove_policy_sql(view_name):
     remove_query = f"""
     SELECT remove_continuous_aggregate_policy('{view_name}');
     """
     _execute_query(remove_query, check_query=False)
+
 
 def add_continuous_aggregate_policy_sql(
     view_name: str,
@@ -612,8 +636,8 @@ def add_continuous_aggregate_policy_sql(
     **kwargs,
 ):
     # Convert None values to SQL NULL without quotes
-    start_offset = 'NULL' if start_offset is None else f"'{start_offset}'"
-    end_offset = 'NULL' if end_offset is None else f"'{end_offset}'"
+    start_offset = "NULL" if start_offset is None else f"'{start_offset}'"
+    end_offset = "NULL" if end_offset is None else f"'{end_offset}'"
 
     policy_query = f"""
         SELECT add_continuous_aggregate_policy('{view_name}',
@@ -628,6 +652,7 @@ def refresh_continuous_aggregate(table_name):
     query = f"CALL refresh_continuous_aggregate('{table_name}', NULL, NULL);"
     _execute_query(query, check_query=False)
 
+
 def _execute_query(query: str, check_query: bool = True):
     """
     Executes the given query.
@@ -640,6 +665,7 @@ def _execute_query(query: str, check_query: bool = True):
         with conn.cursor() as cur:
             cur.execute(query)
 
+
 def timebucket_values_from_database_sql(
     table: str,
     start_datetime: str,
@@ -649,9 +675,9 @@ def timebucket_values_from_database_sql(
     agg_function: str = "avg",
     quantile_value: float = None,
     columns_not_to_select: List[str] = ["datetime", "bucketed_time", "burst_type"],
-    datetime_col = "datetime",
+    datetime_col="datetime",
     preaggregated: bool = True,
-    chunk_size = None,
+    chunk_size=None,
     **kwargs,
 ):
     """
@@ -660,7 +686,7 @@ def timebucket_values_from_database_sql(
     # Type checks
     if not isinstance(table, str):
         raise TypeError(f"'table' should be of str type, got {type(table).__name__}")
-    
+
     if not table in get_table_names_sql():
         raise ValueError(f"Table {table} does not exist in the database")
 
@@ -672,7 +698,7 @@ def timebucket_values_from_database_sql(
         dateutil_parse(start_datetime)
     except ValueError as e:
         raise ValueError(f"start_datetime error: {e}")
-    
+
     try:
         dateutil_parse(end_datetime)
     except ValueError as e:
@@ -707,18 +733,24 @@ def timebucket_values_from_database_sql(
         else:
             view_name = table
         # Check that the table actually exists
-        if not (view_name in get_view_names_sql() or view_name in get_table_names_sql()):
+        if not (
+            view_name in get_view_names_sql() or view_name in get_table_names_sql()
+        ):
             LOGGER.info(f"View {view_name} does not exist in the database")
         # And that is has the data
-        elif not check_if_table_has_data_between_dates_sql(view_name, start_datetime, end_datetime, datetime_col='bucketed_time'):
-            LOGGER.info(f"View {view_name} has no data between {start_datetime} and {end_datetime}")
+        elif not check_if_table_has_data_between_dates_sql(
+            view_name, start_datetime, end_datetime, datetime_col="bucketed_time"
+        ):
+            LOGGER.info(
+                f"View {view_name} has no data between {start_datetime} and {end_datetime}"
+            )
         else:
             table = view_name
             datetime_col = "bucketed_time"
             LOGGER.info(f"Using view {view_name} with timebucket {timebucket}")
 
     LOGGER.info(f"Using table {table}")
-            
+
     if not columns:
         columns = get_column_names_sql(table)
         columns = [column for column in columns if column not in columns_not_to_select]
@@ -742,9 +774,10 @@ def timebucket_values_from_database_sql(
 
     # Query
     query = f"SELECT time_bucket('{timebucket}', {datetime_col}) AS time, {agg_function_sql} FROM {table} WHERE {datetime_col} BETWEEN '{start_datetime}' AND '{end_datetime}' GROUP BY time ORDER BY time"
-    
+
     return _execute_query_for_values(query, columns, chunk_size=chunk_size)
-   
+
+
 def _execute_query_for_values(query, columns, chunk_size=None):
     """
     Executes the given query and returns the results as a list of dictionaries.
@@ -758,7 +791,7 @@ def _execute_query_for_values(query, columns, chunk_size=None):
             return [
                 dict(zip(["datetime"] + columns, row)) for row in cur.fetchall()
             ]  # return list of dict
-    
+
 
 def get_min_max_datetime_from_table_sql(table_name) -> tuple:
     """
@@ -822,7 +855,6 @@ def insert_values_sql(table_name, columns, values):
         cursor.close()
 
 
-
 def drop_database_sql(database_name):
     """
     Drops a database from the database if it exists
@@ -881,6 +913,7 @@ def get_size_of_database_sql():
         )
         size = cursor.fetchone()[0]
         return size
+
 
 def check_query_for_harmful_sql(query: str):
     harmful_patterns = [

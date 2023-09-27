@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+
 def __create_log_path(log_name):
     """Create a log path from a log directory and log name.
     Parameters
@@ -28,6 +29,7 @@ def __create_log_path(log_name):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 
+
 def setup_custom_logger(name, level=logging.INFO):
     # logger settings
     log_format = "%(asctime)s [%(levelname)s] %(filename)s/%(funcName)s:%(lineno)s >> %(message)s"
@@ -35,8 +37,10 @@ def setup_custom_logger(name, level=logging.INFO):
     # setup logger with RotatingFileHandler
     handler = RotatingFileHandler(
         __create_log_path(name),
-        maxBytes=10*1024*1024,  # Maximum file size in bytes, e.g., 10MB. Adjust as needed.
-        backupCount=3  # The number of backup files to keep. Adjust as needed.
+        maxBytes=10
+        * 1024
+        * 1024,  # Maximum file size in bytes, e.g., 10MB. Adjust as needed.
+        backupCount=3,  # The number of backup files to keep. Adjust as needed.
     )
     handler.setFormatter(logging.Formatter(log_format))
     logger = logging.getLogger(name)
@@ -49,6 +53,7 @@ def setup_custom_logger(name, level=logging.INFO):
     logger.addHandler(consoleHandler)
 
     return logger
+
 
 # Create global logger
 main_file_name = os.path.basename(sys.argv[0]).split(".")[0]

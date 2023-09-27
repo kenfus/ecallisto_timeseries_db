@@ -1,13 +1,19 @@
 import dash_bootstrap_components as dbc
 from dash import html
 
+
 def generate_nav_bar():
     return dbc.Navbar(
         dbc.Container(
             [
                 dbc.Row(
                     [
-                        dbc.Col(html.Img(src="/assets/logo_ecallisto_website.png", height="50px"), className="p-0"),
+                        dbc.Col(
+                            html.Img(
+                                src="/assets/logo_ecallisto_website.png", height="50px"
+                            ),
+                            className="p-0",
+                        ),
                         dbc.Col(
                             dbc.Nav(
                                 [

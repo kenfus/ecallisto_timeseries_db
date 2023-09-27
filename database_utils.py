@@ -9,22 +9,24 @@ from tqdm import tqdm
 import traceback
 
 from database_functions import (
-                                add_new_column_sql,
-                                drop_column_sql,
-                                create_table_datetime_primary_key_sql,
-                                create_table_sql,
-                                drop_values_between_two_dates_sql,
-                                get_column_names_sql,
-                                get_distinct_dates_from_table_sql,
-                                get_min_max_datetime_from_table_sql,
-                                get_table_names_sql, insert_values_sql,
-                                table_to_hyper_table)
+    add_new_column_sql,
+    drop_column_sql,
+    create_table_datetime_primary_key_sql,
+    create_table_sql,
+    drop_values_between_two_dates_sql,
+    get_column_names_sql,
+    get_distinct_dates_from_table_sql,
+    get_min_max_datetime_from_table_sql,
+    get_table_names_sql,
+    insert_values_sql,
+    table_to_hyper_table,
+)
 
 from logging_utils import HiddenPrints
 from logging_utils import GLOBAL_LOGGER as LOGGER
-from spectogram_utils import (masked_spectogram_to_array,
-                              spec_time_to_pd_datetime)
+from spectogram_utils import masked_spectogram_to_array, spec_time_to_pd_datetime
 from project_config import BLACK_LIST
+
 
 def extract_instrument_name(file_path):
     """Extract the instrument name from a file path.
@@ -66,15 +68,18 @@ def extract_instrument_name(file_path):
 
     return file_name[1:]  # Remove the first '-'
 
-def get_last_spectrogram_from_paths_list(paths: dict[str, list[str]]) -> CallistoSpectrogram:
-    """Returns the last spectrogram for each instrument from a list of paths.
-    """
+
+def get_last_spectrogram_from_paths_list(
+    paths: dict[str, list[str]]
+) -> CallistoSpectrogram:
+    """Returns the last spectrogram for each instrument from a list of paths."""
     date_paths = zip(paths["date_changed"], paths["path"])
     # Make sure the paths are sorted by date
     last_path = sorted(date_paths, key=lambda x: x[0])[-1][1]
 
     spec = CallistoSpectrogram.read(last_path)
     return spec
+
 
 def get_min_date_of_table(table_name):
     """Get the min date of a table in the database.
@@ -147,13 +152,14 @@ def get_max_of_min_dates_of_tables():
 # Sometimes, there are exception to this rule, sadly:
 # TODO: Improve this function
 NON_CAPITAL_SUBSTRINGS = [
-    'Australia-ASSA',
-    'Arecibo-Observatory',
-    'FINLAND-Siuntio',
-    'Malaysia-Banting',
-    'POLAND-Grotniki',
-    'SWISS-Landschlacht',
-    ]
+    "Australia-ASSA",
+    "Arecibo-Observatory",
+    "FINLAND-Siuntio",
+    "Malaysia-Banting",
+    "POLAND-Grotniki",
+    "SWISS-Landschlacht",
+]
+
 
 def reverse_extract_instrument_name(instrument_name, include_number=False):
     """
@@ -193,8 +199,9 @@ def reverse_extract_instrument_name(instrument_name, include_number=False):
             break
     return combine
 
+
 def instrument_name_to_glob_pattern(instrument_name: str) -> str:
-    """Converts an instrument name to a glob pattern compatible with the e-Callisto 
+    """Converts an instrument name to a glob pattern compatible with the e-Callisto
     page containing the fits files at http://soleil.i4ds.ch/solarradio/data/2002-20yy_Callisto/
     """
     in_dirty = reverse_extract_instrument_name(instrument_name, include_number=True)
@@ -202,7 +209,8 @@ def instrument_name_to_glob_pattern(instrument_name: str) -> str:
     number = split.pop()
     string = "-".join(split)
 
-    return f"{string}*{number}.fit.gz" 
+    return f"{string}*{number}.fit.gz"
+
 
 def add_spec_from_path_to_database(
     path: str, progress: Union[None, tqdm] = None, replace: bool = False
@@ -235,24 +243,27 @@ def add_spec_from_path_to_database(
     try:
         if progress is not None:
             progress.value += 1
-        #with HiddenPrints():  # Hide the download success answer by radiospectra
+        # with HiddenPrints():  # Hide the download success answer by radiospectra
         spec = CallistoSpectrogram.read(path, cache=True)
 
         spec = masked_spectogram_to_array(spec)
         instrument = extract_instrument_name(path)
         if instrument in BLACK_LIST:
-            LOGGER.info(f"Skipping {os.path.basename(path)} because it is in the black list")
+            LOGGER.info(
+                f"Skipping {os.path.basename(path)} because it is in the black list"
+            )
             return
 
         if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
-            LOGGER.warning(
-                f"{os.path.basename(path)} has non-unique frequency axis"
-            )
+            LOGGER.warning(f"{os.path.basename(path)} has non-unique frequency axis")
             spec = combine_non_unique_frequency_axis(spec)
 
         list_frequencies = number_list_to_postgresql_compatible_list(spec.freq_axis)
         list_frequencies.insert(0, "datetime")
-        if not len(np.setdiff1d(list_frequencies, get_column_names_sql(instrument))) == 0:
+        if (
+            not len(np.setdiff1d(list_frequencies, get_column_names_sql(instrument)))
+            == 0
+        ):
             # LOGGER
             LOGGER.warning(f"{os.path.basename(path)} contains new columns")
             columns_to_add = np.setdiff1d(
@@ -268,12 +279,13 @@ def add_spec_from_path_to_database(
 
             for column in columns_to_add:
                 add_new_column_sql(instrument, column, "SMALLINT")
-        
+
         # Check number of columns and raise warning if above 600
         nr_columns = len(get_column_names_sql(instrument))
         if nr_columns > 600:
-            LOGGER.warning(f"{os.path.basename(path)} contains more than 600 columns ({nr_columns})")
-
+            LOGGER.warning(
+                f"{os.path.basename(path)} contains more than 600 columns ({nr_columns})"
+            )
 
         sql_columns = ",".join(list_frequencies)
         data = np.array(spec.data, dtype=np.int16)
@@ -327,9 +339,7 @@ def add_instrument_from_path_to_database(path):
     instrument = extract_instrument_name(path)
     LOGGER.info(f"Adding instrument {instrument} to database")
     if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
-        LOGGER.warning(
-            f"{os.path.basename(path)} has non-unique frequency axis"
-        )
+        LOGGER.warning(f"{os.path.basename(path)} has non-unique frequency axis")
         spec = combine_non_unique_frequency_axis(spec)
     sql_columns = numbers_list_to_postgresql_columns_meta_data(
         spec.freq_axis, "SMALLINT"
@@ -367,6 +377,7 @@ def combine_non_unique_frequency_axis_mean(index, data, agg_function=np.mean):
         [agg_function(data[indices == i], axis=0) for i in range(len(unique_idxs))]
     )
     return data, unique_idxs
+
 
 def combine_non_unique_frequency_axis(spec, method="mean"):
     """Combine non-unique frequency axis data.
@@ -576,4 +587,3 @@ def np_array_to_postgresql_array_with_datetime_index(index, array):
     # Join the strings with a comma to create the final format
     final_format = ",".join(formatted_list)
     return final_format
-

@@ -2,8 +2,12 @@ import os
 import time
 from datetime import datetime, timedelta
 from logging_utils import GLOBAL_LOGGER as LOGGER
-from bulk_load_to_database_between_dates import add_specs_from_paths_to_database, add_instruments_from_paths_to_database
+from bulk_load_to_database_between_dates import (
+    add_specs_from_paths_to_database,
+    add_instruments_from_paths_to_database,
+)
 from database_utils import create_dict_of_instrument_paths
+
 
 def get_files_with_timestamps(path):
     try:
@@ -20,21 +24,25 @@ def get_files_with_timestamps(path):
         LOGGER.error(f"Error during fetching timestamps: {str(e)}")
         return {}
 
+
 def get_dirs_to_monitor(base_path, days_to_check):
     dirs_to_monitor = []
     try:
         for i in range(days_to_check):
             day_ago = datetime.now() - timedelta(days=i)
-            date_path = day_ago.strftime('%Y/%m/%d')
+            date_path = day_ago.strftime("%Y/%m/%d")
             # Append to the beginning of list
             dirs_to_monitor.insert(0, f"{base_path}{date_path}/")
 
         LOGGER.info(f"Monitoring {len(dirs_to_monitor)} directories.")
-        LOGGER.info(f"First and last directory to monitor: {dirs_to_monitor[0]} and {dirs_to_monitor[-1]}.")
+        LOGGER.info(
+            f"First and last directory to monitor: {dirs_to_monitor[0]} and {dirs_to_monitor[-1]}."
+        )
         return dirs_to_monitor
     except Exception as e:
         LOGGER.error(f"Error during fetching directories to monitor: {str(e)}")
         return []
+
 
 def monitor_directories(base_path, days_to_check, chunk_size, cpu_count, replace):
     dirs_to_monitor = get_dirs_to_monitor(base_path, days_to_check)
@@ -47,8 +55,10 @@ def monitor_directories(base_path, days_to_check, chunk_size, cpu_count, replace
             if new_day != current_day:
                 LOGGER.info(f"New day! {new_day}")
                 current_day = new_day
-                
-                oldest_day = (datetime.now() - timedelta(days=days_to_check)).strftime('%Y/%m/%d')
+
+                oldest_day = (datetime.now() - timedelta(days=days_to_check)).strftime(
+                    "%Y/%m/%d"
+                )
                 oldest_dir = f"{base_path}{oldest_day}/"
                 LOGGER.info(f"Removing {oldest_dir} from prev_state")
 
@@ -58,10 +68,14 @@ def monitor_directories(base_path, days_to_check, chunk_size, cpu_count, replace
                 del prev_state[oldest_dir]
                 dirs_to_monitor.remove(oldest_dir)
                 dirs_to_monitor.append(new_day_dir)
-                
+
                 prev_state[new_day_dir] = get_files_with_timestamps(new_day_dir)
 
-            curr_state = {dir: get_files_with_timestamps(dir) for dir in dirs_to_monitor if dir in prev_state}
+            curr_state = {
+                dir: get_files_with_timestamps(dir)
+                for dir in dirs_to_monitor
+                if dir in prev_state
+            }
 
             added = []
             removed = []
@@ -70,36 +84,49 @@ def monitor_directories(base_path, days_to_check, chunk_size, cpu_count, replace
             for dir in dirs_to_monitor:
                 added += [f for f in curr_state[dir] if f not in prev_state[dir]]
                 removed += [f for f in prev_state[dir] if f not in curr_state[dir]]
-                modified += [f for f in curr_state[dir] if f in prev_state[dir] and curr_state[dir][f] != prev_state[dir][f]]
+                modified += [
+                    f
+                    for f in curr_state[dir]
+                    if f in prev_state[dir] and curr_state[dir][f] != prev_state[dir][f]
+                ]
 
             if added:
-                added_examples = ', '.join(added[:3]) + ('...' if len(added) > 3 else '')
+                added_examples = ", ".join(added[:3]) + (
+                    "..." if len(added) > 3 else ""
+                )
                 LOGGER.info(f"Added ({len(added)}): {added_examples}")
             if removed:
-                removed_examples = ', '.join(removed[:3]) + ('...' if len(removed) > 3 else '')
+                removed_examples = ", ".join(removed[:3]) + (
+                    "..." if len(removed) > 3 else ""
+                )
                 LOGGER.info(f"Removed ({len(removed)}): {removed_examples}")
             if modified:
-                modified_examples = ', '.join(modified[:3]) + ('...' if len(modified) > 3 else '')
+                modified_examples = ", ".join(modified[:3]) + (
+                    "..." if len(modified) > 3 else ""
+                )
                 LOGGER.info(f"Modified ({len(modified)}): {modified_examples}")
 
             to_add = added + modified
             if to_add:
                 LOGGER.info(f"Adding {len(to_add)} files to the database...")
-                file_names_dates = [f.split('2002-20yy_Callisto/')[-1] for f in to_add]
+                file_names_dates = [f.split("2002-20yy_Callisto/")[-1] for f in to_add]
                 LOGGER.info(f"Files added: {'|'.join(file_names_dates)}")
                 # Create dictionary paths to create new table if it does not exist
                 dict_paths = create_dict_of_instrument_paths(to_add)
                 # Add the instruments to the database by creating a new table
                 add_instruments_from_paths_to_database(dict_paths)
-                add_specs_from_paths_to_database(to_add, cpu_count=cpu_count, chunk_size=chunk_size, replace=replace)
+                add_specs_from_paths_to_database(
+                    to_add, cpu_count=cpu_count, chunk_size=chunk_size, replace=replace
+                )
                 LOGGER.info(f"Done adding {len(to_add)} files to the database.")
 
             prev_state = curr_state
-            time.sleep(3*60)
+            time.sleep(3 * 60)
 
     except KeyboardInterrupt:
         LOGGER.info("Keyboard interrupt received. Exiting...")
         return
+
 
 if __name__ == "__main__":
     base_path = "/mnt/nas05/data01/radio/2002-20yy_Callisto/"
@@ -108,6 +135,12 @@ if __name__ == "__main__":
     chunk_size = 100
     replace = False
     try:
-        monitor_directories(base_path=base_path, days_to_check=days_to_check, chunk_size=chunk_size, cpu_count=cpu_count, replace=replace)
+        monitor_directories(
+            base_path=base_path,
+            days_to_check=days_to_check,
+            chunk_size=chunk_size,
+            cpu_count=cpu_count,
+            replace=replace,
+        )
     except Exception as e:
         LOGGER.error(f"Fatal error during directory monitoring: {str(e)}")

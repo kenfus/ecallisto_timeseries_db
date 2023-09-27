@@ -12,7 +12,12 @@ import pandas as pd
 from logging_utils import GLOBAL_LOGGER as LOGGER
 from data_creation_utils import get_paths
 from database_functions import get_table_names_sql
-from database_utils import add_spec_from_path_to_database, add_instrument_from_path_to_database, create_dict_of_instrument_paths
+from database_utils import (
+    add_spec_from_path_to_database,
+    add_instrument_from_path_to_database,
+    create_dict_of_instrument_paths,
+)
+
 
 def add_instruments_from_paths_to_database(dict_paths):
     """
@@ -49,6 +54,7 @@ def add_specs_from_paths_to_database(urls, chunk_size, cpu_count, replace=False)
         # Wait for all tasks to complete
         pool.close()
         pool.join()
+
 
 def add_data_to_database(
     start_date,

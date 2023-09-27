@@ -3,7 +3,16 @@ from datetime import timedelta
 import pandas as pd
 import plotly.express as px
 
-def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18, round_precision=1, color_scale=px.colors.sequential.Plasma):
+
+def plot_spectogram(
+    df,
+    instrument_name,
+    start_datetime,
+    end_datetime,
+    size=18,
+    round_precision=1,
+    color_scale=px.colors.sequential.Plasma,
+):
     # Create a new dataframe with rounded column names
     df_rounded = df.copy()
     df_rounded.columns = [f"{float(col):.{round_precision}f}" for col in df.columns]
@@ -16,7 +25,12 @@ def plot_spectogram(df, instrument_name, start_datetime, end_datetime, size=18, 
     sd_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
     ed_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
-    fig = px.imshow(df_rounded.T, color_continuous_scale=color_scale, zmin=df.min().min(), zmax=df.max().max())
+    fig = px.imshow(
+        df_rounded.T,
+        color_continuous_scale=color_scale,
+        zmin=df.min().min(),
+        zmax=df.max().max(),
+    )
     fig.update_layout(
         title=f"Spectogram of {instrument_name} between {sd_str} and {ed_str}",
         xaxis_title="Datetime",
@@ -64,10 +78,12 @@ def plot_spectogram_with_burst(
 
     return fig
 
+
 def calculate_timedelta_from_strings(start, end):
     start = pd.to_datetime(start)
     end = pd.to_datetime(end)
     return end - start
+
 
 def timedelta_to_sql_timebucket_value(timedelta):
     # Convert to seconds
@@ -82,7 +98,9 @@ def timedelta_to_sql_timebucket_value(timedelta):
         sql_value = f"{int(hours)} h" if hours.is_integer() else f"{hours:.1f} h"
     elif seconds >= 60:  # More than 1 minute
         minutes = seconds / 60
-        sql_value = f"{int(minutes)} min" if minutes.is_integer() else f"{minutes:.1f} min"
+        sql_value = (
+            f"{int(minutes)} min" if minutes.is_integer() else f"{minutes:.1f} min"
+        )
     else:
         sql_value = f"{seconds:.1f} s"
 
