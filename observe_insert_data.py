@@ -1,12 +1,13 @@
 import os
 import time
 from datetime import datetime, timedelta
-from logging_utils import GLOBAL_LOGGER as LOGGER
+
 from bulk_load_to_database_between_dates import (
-    add_specs_from_paths_to_database,
     add_instruments_from_paths_to_database,
+    add_specs_from_paths_to_database,
 )
 from database_utils import create_dict_of_instrument_paths
+from logging_utils import GLOBAL_LOGGER as LOGGER
 
 
 def get_files_with_timestamps(path):

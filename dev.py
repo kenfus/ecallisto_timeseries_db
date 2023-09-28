@@ -1,13 +1,13 @@
-from database_functions import (
-    create_continuous_aggregate_sql,
-    get_table_names_sql,
-    drop_materialized_view_sql,
-    get_view_names_sql,
-    add_continuous_aggregate_policy_sql,
-    remove_policy_sql,
-)
 from tqdm import tqdm
 
+from database_functions import (
+    add_continuous_aggregate_policy_sql,
+    create_continuous_aggregate_sql,
+    drop_materialized_view_sql,
+    get_table_names_sql,
+    get_view_names_sql,
+    remove_policy_sql,
+)
 
 for view in tqdm(get_view_names_sql()):
     remove_policy_sql(view)

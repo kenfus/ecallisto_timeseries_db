@@ -12,6 +12,7 @@ except ImportError:
     print("psycopg2 not installed, DB functions will not work (which can be ok).")
 from dateutil.parser import parse as dateutil_parse
 from pytimeparse import parse as pytimeparse_parse
+
 from logging_utils import GLOBAL_LOGGER as LOGGER
 
 # Create variables for the connection to the OS
@@ -29,8 +30,8 @@ if "PGDATABASE" not in os.environ:
 ##
 CONNECTION = f' dbname={os.environ["PGDATABASE"]} user={os.environ["PGUSER"]} host={os.environ["PGHOST"]} password={os.environ["PGPASSWORD"]}'
 # Map between seconds of timebucket and view name
-CONT_AGG_VALUES = [60]
-CONT_AGG_VALUES_VIEW_NAMES = ["1min"]
+CONT_AGG_VALUES = [0.25, 60]
+CONT_AGG_VALUES_VIEW_NAMES = ["0.25s", "1min"]
 
 
 def fill_missing_timesteps_with_nan(df):
@@ -725,29 +726,25 @@ def timebucket_values_from_database_sql(
             f"'quantile_value' should be of float type, got {type(quantile_value).__name__}"
         )
     if preaggregated:
-        # If preaggrated yes, check if the table exists
+        # If preaggrated yes, check if we should even use the view or not
         timebucket = round_timebucket_to_closest_seconds(timebucket)
+        LOGGER.info(f"Using timebucket {timebucket}")
+        # Create view_name
+        view_name = create_view_name_aggregation(table, timebucket, agg_function)
         # Logic to select the correct view
-        if timebucket is not None and timebucket != "0.25 s":
-            view_name = create_view_name_aggregation(table, timebucket, agg_function)
-        else:
-            view_name = table
-        # Check that the table actually exists
-        if not (
-            view_name in get_view_names_sql() or view_name in get_table_names_sql()
-        ):
-            LOGGER.info(f"View {view_name} does not exist in the database")
-        # And that is has the data
-        elif not check_if_table_has_data_between_dates_sql(
-            view_name, start_datetime, end_datetime, datetime_col="bucketed_time"
-        ):
-            LOGGER.info(
-                f"View {view_name} has no data between {start_datetime} and {end_datetime}"
+        if (
+            not timebucket == "0.25 s"
+            and view_name in get_view_names_sql()
+            and check_if_table_has_data_between_dates_sql(
+                view_name, start_datetime, end_datetime, datetime_col="bucketed_time"
             )
-        else:
+        ):
             table = view_name
             datetime_col = "bucketed_time"
-            LOGGER.info(f"Using view {view_name} with timebucket {timebucket}")
+        else:
+            table = table  # Make no sense I know but still.
+            datetime_col = "datetime"
+        LOGGER.info(f"Using view {view_name} with timebucket {timebucket}")
 
     LOGGER.info(f"Using table {table}")
 

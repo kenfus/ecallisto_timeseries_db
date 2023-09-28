@@ -1,37 +1,37 @@
 import asyncio
+import hashlib
 import json
 import os
 import time
-import hashlib
-from typing import List, Optional
 from datetime import datetime, timedelta
-from fastapi import HTTPException
-from fastapi import BackgroundTasks, FastAPI
+from typing import List, Optional
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+##
+import logging_utils
+from bulk_load_to_database_between_dates import (
+    get_paths,
+)  # TODO: Move this get_paths to another utils file.
 from database_functions import (
+    check_if_table_has_data_between_dates_sql,
+    get_column_names_sql,
+    get_min_max_datetime_from_table_sql,
+    get_table_names_with_data_between_dates_sql,
     sql_result_to_df,
+    timebucket_string_to_seconds,
     timebucket_values_from_database_sql,
     values_from_database_sql,
-    get_table_names_with_data_between_dates_sql,
-    check_if_table_has_data_between_dates_sql,
-    get_min_max_datetime_from_table_sql,
-    get_column_names_sql,
-    timebucket_string_to_seconds,
 )
 
 ## To add meta data
 from database_utils import (
-    get_table_names_sql,
     get_last_spectrogram_from_paths_list,
+    get_table_names_sql,
     instrument_name_to_glob_pattern,
 )
-from bulk_load_to_database_between_dates import (
-    get_paths,
-)  # TODO: Move this get_paths to another utils file.
-
-##
-import logging_utils
 
 LOGGER = logging_utils.setup_custom_logger("rest_api")
 

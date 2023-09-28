@@ -1,4 +1,5 @@
 import os
+import traceback
 from glob import glob
 from typing import Union
 
@@ -6,13 +7,12 @@ import numpy as np
 import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
 from tqdm import tqdm
-import traceback
 
 from database_functions import (
     add_new_column_sql,
-    drop_column_sql,
     create_table_datetime_primary_key_sql,
     create_table_sql,
+    drop_column_sql,
     drop_values_between_two_dates_sql,
     get_column_names_sql,
     get_distinct_dates_from_table_sql,
@@ -21,11 +21,10 @@ from database_functions import (
     insert_values_sql,
     table_to_hyper_table,
 )
-
-from logging_utils import HiddenPrints
 from logging_utils import GLOBAL_LOGGER as LOGGER
-from spectogram_utils import masked_spectogram_to_array, spec_time_to_pd_datetime
+from logging_utils import HiddenPrints
 from project_config import BLACK_LIST
+from spectogram_utils import masked_spectogram_to_array, spec_time_to_pd_datetime
 
 
 def extract_instrument_name(file_path):

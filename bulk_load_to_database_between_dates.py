@@ -6,17 +6,17 @@ from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing.pool import Pool as Pool
 
-from tqdm import tqdm
 import pandas as pd
+from tqdm import tqdm
 
-from logging_utils import GLOBAL_LOGGER as LOGGER
 from data_creation_utils import get_paths
 from database_functions import get_table_names_sql
 from database_utils import (
-    add_spec_from_path_to_database,
     add_instrument_from_path_to_database,
+    add_spec_from_path_to_database,
     create_dict_of_instrument_paths,
 )
+from logging_utils import GLOBAL_LOGGER as LOGGER
 
 
 def add_instruments_from_paths_to_database(dict_paths):

@@ -1,32 +1,48 @@
 import dash
+import dash_bootstrap_components as dbc
+import pandas as pd
+from astropy.io import fits
+from dash import Input, Output, State, dcc, html
 from dash.dependencies import Input, Output, State
-from dash import dcc, html
-from database_functions import (
-    timebucket_values_from_database_sql,
-    sql_result_to_df,
-    get_table_names_sql,
-    check_if_table_has_data_between_dates_sql,
-    get_table_names_with_data_between_dates_sql,
-)
-from plotting_utils import timedelta_to_sql_timebucket_value
-from ecallisto_ng.plotting.utils import fill_missing_timesteps_with_nan
-from ecallisto_ng.plotting.plotting import plot_spectogram
 from ecallisto_ng.data_processing.utils import (
-    subtract_rolling_background,
     elimwrongchannels,
     subtract_constant_background,
+    subtract_rolling_background,
 )
-import pandas as pd
-from datetime import datetime, timedelta
-import dash_bootstrap_components as dbc
-from dash_utils import generate_nav_bar
+from ecallisto_ng.plotting.plotting import plot_spectogram
+from ecallisto_ng.plotting.utils import fill_missing_timesteps_with_nan
+from flask import Flask, send_file
+
+from bulk_load_to_database_between_dates import (
+    get_paths,
+)  # TODO: Move this get_paths to another utils file.
+from dash_utils import generate_datetime_picker, generate_load_button, generate_nav_bar
+from database_functions import (
+    check_if_table_has_data_between_dates_sql,
+    get_table_names_sql,
+    get_table_names_with_data_between_dates_sql,
+    sql_result_to_df,
+    timebucket_values_from_database_sql,
+)
+from database_utils import (
+    get_last_spectrogram_from_paths_list,
+    get_table_names_sql,
+    instrument_name_to_glob_pattern,
+)
+from plotting_utils import timedelta_to_sql_timebucket_value
+from rest_api import return_header_from_newest_spectogram
 
 # Use a Bootstrap stylesheet
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__,
+    url_base_pathname="/ecallisto_dashboard/",
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+)
+server = Flask(__name__, static_folder="assets")
 navbar = generate_nav_bar()
 
 # Define some constants
-RESOLUTION_WIDTH = 1080
+RESOLUTION_WIDTH = 2000
 
 # for gunicorn
 server = app.server
@@ -79,7 +95,20 @@ app.layout = html.Div(
                 dbc.Col(
                     html.P(
                         [
-                            "When selecting `Top 5 instruments`, the five instruments with the highest signal-to-noise ratio are selected."
+                            "When selecting `Top 5 instruments`, the five instruments with the highest signal-to-noise ratio are selected. To download the image, please click on the camera icon in the top right corner of the plot. ",
+                        ],
+                        style={"font-size": "1em", "margin-top": "10px"},
+                    ),  # Add user usage information
+                ),
+            ]
+        ),
+        html.H4("Download"),  # Add title for developer-focused section
+        dbc.Row(
+            [
+                dbc.Col(
+                    html.P(
+                        [
+                            "To download the image, please click on the camera icon in the top right corner of the plot. To download the fits-file, please click on the download button below the plot.",
                         ],
                         style={"font-size": "1em", "margin-top": "10px"},
                     ),  # Add user usage information
@@ -88,160 +117,8 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.Div(
-                    [
-                        dcc.Input(
-                            id="start-datetime-picker",
-                            type="datetime-local",
-                            value=datetime.now()
-                            .replace(hour=0, minute=0, second=0, microsecond=0)
-                            .strftime("%Y-%m-%dT%H:%M"),
-                        ),
-                        dcc.Input(
-                            id="end-datetime-picker",
-                            type="datetime-local",
-                            value=datetime.now().replace(
-                                hour=0, minute=0, second=0, microsecond=0
-                            )
-                            + timedelta(days=1),
-                        ),
-                    ],
-                    style={"width": "100%", "display": "block", "margin-top": "60px"},
-                ),
-                html.Div(
-                    id="instrument-and-load-button-container",  # This is the new Div container
-                    children=[
-                        dcc.Store(
-                            id="instrument-loading-state", data=False
-                        ),  # initially not loading
-                        dcc.Loading(
-                            id="loading-instrument-dropdown",
-                            type="default",
-                            children=[
-                                html.Div(
-                                    [
-                                        dcc.Dropdown(
-                                            id="instrument-dropdown",
-                                            options=options_instrument,
-                                            value="top5",
-                                            multi=True,
-                                        ),
-                                    ],
-                                    style={"width": "100%", "display": "block"},
-                                ),
-                                html.Div(
-                                    [
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    html.Div(
-                                                        [
-                                                            html.H5(
-                                                                "Background Subtraction"
-                                                            ),  # Title
-                                                            dcc.Dropdown(
-                                                                id="background-sub-dropdown",
-                                                                options=[
-                                                                    {
-                                                                        "label": "None",
-                                                                        "value": "none",
-                                                                    },
-                                                                    {
-                                                                        "label": "Constant BackSub",
-                                                                        "value": "constant",
-                                                                    },
-                                                                    {
-                                                                        "label": "Rolling BackSub",
-                                                                        "value": "rolling",
-                                                                    },
-                                                                ],
-                                                                value="none",  # default value
-                                                                multi=False,
-                                                            ),
-                                                        ]
-                                                    ),
-                                                    width={"size": 6, "offset": 0},
-                                                ),
-                                                dbc.Col(
-                                                    html.Div(
-                                                        [
-                                                            html.H5(
-                                                                "Channel Operations"
-                                                            ),  # Title
-                                                            dcc.Checklist(
-                                                                id="elim-wrong-channels-checklist",
-                                                                options=[
-                                                                    {
-                                                                        "label": "Eliminate Wrong Channels",
-                                                                        "value": "elim",
-                                                                    },
-                                                                ],
-                                                                value=[],  # default value, empty means not selected
-                                                            ),
-                                                        ]
-                                                    ),
-                                                    width={"size": 6, "offset": 0},
-                                                ),
-                                                dbc.Col(
-                                                    html.Div(
-                                                        [
-                                                            html.H5(
-                                                                "Plotting Options"
-                                                            ),  # New Title
-                                                            dcc.Dropdown(
-                                                                id="color-scale-dropdown",
-                                                                options=[
-                                                                    {
-                                                                        "label": "Plasma",
-                                                                        "value": "Plasma",
-                                                                    },
-                                                                    {
-                                                                        "label": "Viridis",
-                                                                        "value": "Viridis",
-                                                                    },
-                                                                    {
-                                                                        "label": "Cividis",
-                                                                        "value": "Cividis",
-                                                                    },
-                                                                ],
-                                                                value="Plasma",  # default value
-                                                                multi=False,
-                                                            ),
-                                                        ]
-                                                    ),
-                                                    width={"size": 4, "offset": 0},
-                                                ),
-                                            ],
-                                            className="mb-4",
-                                        ),  # Margin bottom
-                                        html.Div(
-                                            id="load-data-button-container",
-                                            children=[
-                                                dcc.Store(
-                                                    id="load-data-loading-state",
-                                                    data=False,
-                                                ),  # initially not loading
-                                                dcc.Loading(
-                                                    id="loading-button",
-                                                    type="default",  # other types: 'circle', 'cube', 'dot'
-                                                    children=[
-                                                        html.Button(
-                                                            "Load Data",
-                                                            id="load-data-button",
-                                                            n_clicks=0,
-                                                        )
-                                                    ],
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                    className="mt-4",
-                                ),  # Margin top
-                            ],
-                        ),
-                    ],
-                    style={"display": "block"},  # Initially, the container is visible
-                ),
+                generate_datetime_picker(),
+                generate_load_button(options_instrument),
             ]
         ),
         html.Div(id="graphs-container", children=[]),
@@ -254,7 +131,10 @@ app.layout = html.Div(
         Output("instrument-dropdown", "options"),
         Output("instrument-loading-state", "data"),
     ],
-    [Input("date-picker-range", "start_date"), Input("date-picker-range", "end_date")],
+    [
+        Input("start-datetime-picker", "value"),
+        Input("end-datetime-picker", "value"),
+    ],
 )
 def update_instrument_dropdown_options(start_datetime, end_datetime):
     # initially set loading state to True
@@ -291,8 +171,11 @@ def update_graph(
     elim_option,
     color_scale,
 ):
+    # Clear graphs
     loading_state = False  # initially set loading state to False
-    if n_clicks > 0:
+    if n_clicks < 1:
+        return [], loading_state
+    else:
         start_datetime = pd.to_datetime(start_date)
         end_datetime = pd.to_datetime(end_date)
         time_delta = (end_datetime - start_datetime) / RESOLUTION_WIDTH
@@ -310,7 +193,9 @@ def update_graph(
             ]  # Replace in future with top 5 instruments with highest signal-to-noise ratio
 
         graphs = []
-        loading_state = True  # initially set loading state to Tr
+        loading_state = True  # initially set loading state to True
+        global dfs
+        dfs = {}
         for instrument in instruments:
             query = {
                 "table": instrument,
@@ -334,6 +219,23 @@ def update_graph(
             # Create data
             sql_result = timebucket_values_from_database_sql(**query)
             df = sql_result_to_df(sql_result)
+
+            # Get header information
+            meta_data = return_header_from_newest_spectogram(df, instrument)
+
+            # Add header information to DataFrame
+            for key, value in meta_data.items():
+                df.attrs[key] = value
+            # Store unedited data
+            dfs[instrument] = df
+            # Create download button with a unique ID
+            download_link = html.A(
+                "Download",
+                id={"type": "download", "index": instrument},
+                className="download-button",  # Optional, for styling like a button
+                href=f"/ecallisto_dashboard/download/{instrument}",
+            )
+
             # Sync time axis between plots
             df = fill_missing_timesteps_with_nan(df)
             # Background subtraction
@@ -350,7 +252,7 @@ def update_graph(
             )
             fig_style = {"display": "block"} if fig else {"display": "none"}
             graph = dcc.Graph(
-                id=f"live-graph-{instrument}",
+                id={"type": "live-graph", "index": instrument},
                 figure=fig,
                 config={
                     "displayModeBar": True,
@@ -360,7 +262,6 @@ def update_graph(
                         "zoomIn2d",
                         "zoomOut2d",
                         "autoScale2d",
-                        "resetScale2d",
                         "hoverClosestCartesian",
                         "hoverCompareCartesian",
                     ],
@@ -368,12 +269,62 @@ def update_graph(
                 style=fig_style,
                 responsive=True,
             )
-            graphs.append(graph)
+            print(f"Setting button ID with instrument: {instrument}")
+            graphs.append(html.Div([graph, download_link]))
         loading_state = False  # set loading state to False after options are loaded
         return graphs, loading_state
-    return [], loading_state
+
+
+# For meta data
+def return_header_from_newest_spectogram(df, instrument_name):
+    """
+    Add the header from the newest spectrogram (based on the datetime inside the df)
+    to the dataframe.
+    """
+    df = df.copy()
+    # Get last day from df
+    last_day = df.index.max().date()
+    # Get glob pattern
+    glob_pattern = instrument_name_to_glob_pattern(instrument_name)
+    # Get paths
+    paths = get_paths(last_day, last_day, glob_pattern)
+    # Get last spectrogram
+    last_spectrogram = get_last_spectrogram_from_paths_list(paths)
+    dict_ = {}
+    # Add metadata
+    for key, value in last_spectrogram.header.items():
+        dict_[key] = value
+
+    del last_spectrogram
+    return dict_
+
+
+# This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
+@server.route("/ecallisto_dashboard/download/<instrument>")
+def download(instrument):
+    df = dfs[instrument]  # Get DataFrame
+
+    # Transpose
+    df = df.T
+
+    # Convert DataFrame to 2D NumPy array (assumes df is already 2D)
+    data_array = df.to_numpy()
+
+    # Create header
+    header = fits.Header()
+    for key, value in df.attrs.items():
+        header[key] = value
+
+    # Create ImageHDU
+    hdu = fits.ImageHDU(data=data_array, header=header)
+
+    # Write to FITS file
+    file_path = f"./_tmp/temp_{instrument}.fits"
+    hdu.writeto(file_path, overwrite=True)
+
+    return send_file(file_path, as_attachment=True, download_name=f"{instrument}.fits")
 
 
 # Run the app
 if __name__ == "__main__":
-    app.run(debug=False, host="127.0.0.1", port=8051)
+    app.run(debug=True, host="127.0.0.1", port=8051, dev_tools_props_check=False)
