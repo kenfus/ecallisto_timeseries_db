@@ -205,6 +205,66 @@ def generate_plotting_options():
     )
 
 
+def generate_intro():
+    return [
+        dbc.Col(
+            html.P(
+                [
+                    "The solar radio spectrograms that can be retrieved through this interface are provided by the network e-Callisto. ",
+                    html.Br(),
+                    "This network consists of a common receiver, a CALLISTO spectrometer, that are installed on radio antennas spread around the globe. ",
+                    html.Br(),
+                    "They all observe the full Sun from diverse latitudes and longitudes. Due to the spreading, the network reaches a 24/7 observing time coverage.",
+                ],
+                style={"font-size": "1em", "margin-top": "10px"},
+            ),  # Add description
+        ),
+    ]
+
+
+def generate_ecallisto_info():
+    return [
+        dbc.Col(
+            html.P(
+                [
+                    "We strongly recommend to use the new version of the ",
+                    html.A(
+                        "software, which is called eCallisto NG",
+                        href="https://pypi.org/project/ecallisto-ng/",
+                    ),
+                ],
+                style={"font-size": "1em", "margin-top": "10px"},
+            ),
+        ),
+    ]
+
+
+def generate_user_guide():
+    return [
+        dbc.Col(
+            html.P(
+                [
+                    "To download the image, please click on the camera icon in the top right corner of the plot. If you encounter any problems, please contact vincenzo.timmel@fhnw.ch",
+                ],
+                style={"font-size": "1em", "margin-top": "10px"},
+            ),  # Add user usage information
+        ),
+    ]
+
+
+def generate_download_guide():
+    return [
+        dbc.Col(
+            html.P(
+                [
+                    "To download the image, please click on the camera icon in the top right corner of the plot. To download the fits-file, please click on the download button below the plot.",
+                ],
+                style={"font-size": "1em", "margin-top": "10px"},
+            ),  # Add user usage information
+        ),
+    ]
+
+
 def generate_load_button(options_instrument):
     return html.Div(
         id="instrument-and-load-button-container",  # This is the new Div container

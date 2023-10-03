@@ -157,6 +157,9 @@ NON_CAPITAL_SUBSTRINGS = [
     "Malaysia-Banting",
     "POLAND-Grotniki",
     "SWISS-Landschlacht",
+    "EGYPT-Alexandria",
+    "FINLAND-Siuntio",
+    "AUSTRIA-Krumbach",
 ]
 
 

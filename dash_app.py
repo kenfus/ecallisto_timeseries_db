@@ -1,3 +1,6 @@
+import threading
+import time as time
+
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -13,10 +16,15 @@ from ecallisto_ng.plotting.plotting import plot_spectogram
 from ecallisto_ng.plotting.utils import fill_missing_timesteps_with_nan
 from flask import Flask, send_file
 
-from bulk_load_to_database_between_dates import (
-    get_paths,
-)  # TODO: Move this get_paths to another utils file.
-from dash_utils import generate_datetime_picker, generate_load_button, generate_nav_bar
+from dash_utils import (
+    generate_datetime_picker,
+    generate_download_guide,
+    generate_ecallisto_info,
+    generate_intro,
+    generate_load_button,
+    generate_nav_bar,
+    generate_user_guide,
+)
 from database_functions import (
     check_if_table_has_data_between_dates_sql,
     get_table_names_sql,
@@ -24,11 +32,8 @@ from database_functions import (
     sql_result_to_df,
     timebucket_values_from_database_sql,
 )
-from database_utils import (
-    get_last_spectrogram_from_paths_list,
-    get_table_names_sql,
-    instrument_name_to_glob_pattern,
-)
+from database_utils import get_table_names_sql
+from logging_utils import GLOBAL_LOGGER as LOGGER
 from plotting_utils import timedelta_to_sql_timebucket_value
 from rest_api import return_header_from_newest_spectogram
 
@@ -43,6 +48,9 @@ navbar = generate_nav_bar()
 
 # Define some constants
 RESOLUTION_WIDTH = 2000
+INTERVAL = 5 * 1000  # 5 seconds
+# Get LOGGER
+LOGGER = app.logger
 
 # for gunicorn
 server = app.server
@@ -56,15 +64,19 @@ def generate_options_instrument(list_of_instruments):
     # Sort by label
     options_instrument = sorted(options_instrument, key=lambda k: k["label"])
     # Add Top 3 instruments
-    options_instrument.insert(0, {"label": "Top 5 instruments", "value": "top5"})
+    options_instrument.insert(0, {"label": "All", "value": "all"})
     return options_instrument
 
 
+## Global variables
 options_instrument = generate_options_instrument(get_table_names_sql())
+dfs_query = {}
+graphs = []
 
 # Define the layout of the app
 app.layout = html.Div(
     [
+        dcc.Interval(id="graph-update-interval", interval=INTERVAL, n_intervals=0),
         navbar,
         dbc.Col(
             dbc.NavbarBrand(
@@ -73,48 +85,13 @@ app.layout = html.Div(
                 style={"font-size": "3em"},
             )
         ),  # Increase font size
-        dbc.Row(
-            [
-                dbc.Col(
-                    html.P(
-                        [
-                            "The solar radio spectrograms that can be retrieved through this interface are provided by the network e-Callisto. ",
-                            html.Br(),
-                            "This network consists of a common receiver, a CALLISTO spectrometer, that are installed on radio antennas spread around the globe. ",
-                            html.Br(),
-                            "They all observe the full Sun from diverse latitudes and longitudes. Due to the spreading, the network reaches a 24/7 observing time coverage.",
-                        ],
-                        style={"font-size": "1em", "margin-top": "10px"},
-                    ),  # Add description
-                ),
-            ]
-        ),
+        dbc.Row(generate_intro()),
         html.H3("User Usage"),  # Add title for user-focused section
-        dbc.Row(
-            [
-                dbc.Col(
-                    html.P(
-                        [
-                            "When selecting `Top 5 instruments`, the five instruments with the highest signal-to-noise ratio are selected. To download the image, please click on the camera icon in the top right corner of the plot. ",
-                        ],
-                        style={"font-size": "1em", "margin-top": "10px"},
-                    ),  # Add user usage information
-                ),
-            ]
-        ),
+        dbc.Row(generate_user_guide()),
         html.H4("Download"),  # Add title for developer-focused section
-        dbc.Row(
-            [
-                dbc.Col(
-                    html.P(
-                        [
-                            "To download the image, please click on the camera icon in the top right corner of the plot. To download the fits-file, please click on the download button below the plot.",
-                        ],
-                        style={"font-size": "1em", "margin-top": "10px"},
-                    ),  # Add user usage information
-                ),
-            ]
-        ),
+        dbc.Row(generate_download_guide()),
+        html.H5("Ecallisto NG"),
+        dbc.Row(generate_ecallisto_info()),
         html.Div(
             [
                 generate_datetime_picker(),
@@ -122,6 +99,8 @@ app.layout = html.Div(
             ]
         ),
         html.Div(id="graphs-container", children=[]),
+        html.Div(id="dummy-output", style={"display": "none"}),
+        dcc.Store(id="store-update-state", data={"n": 0}),
     ]
 )
 
@@ -138,31 +117,38 @@ app.layout = html.Div(
 )
 def update_instrument_dropdown_options(start_datetime, end_datetime):
     # initially set loading state to True
-    loading_state = True
+    loading_state = False
     options = []
     if start_datetime and end_datetime:
         available_instruments = get_table_names_with_data_between_dates_sql(
             start_datetime, end_datetime
         )
         options = generate_options_instrument(available_instruments)
-        loading_state = False  # set loading state to False after options are loaded
+    else:
+        options = generate_options_instrument(get_table_names_sql())
+    loading_state = False
     return options, loading_state
 
 
 # This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
 @app.callback(
-    [Output("graphs-container", "children"), Output("load-data-loading-state", "data")],
-    [Input("load-data-button", "n_clicks")],
+    [
+        Output("dummy-output", "children"),
+    ],
+    [
+        Input("load-data-button", "n_clicks"),
+    ],
     [
         State("instrument-dropdown", "value"),
         State("start-datetime-picker", "value"),
         State("end-datetime-picker", "value"),
         State("background-sub-dropdown", "value"),
         State("elim-wrong-channels-checklist", "value"),
-        State("color-scale-dropdown", "value"),  # Add this line
+        State("color-scale-dropdown", "value"),
     ],
+    prevent_initial_call=True,
 )
-def update_graph(
+def start_data_fetching(
     n_clicks,
     instruments,
     start_date,
@@ -171,10 +157,11 @@ def update_graph(
     elim_option,
     color_scale,
 ):
-    # Clear graphs
-    loading_state = False  # initially set loading state to False
+    # Make sure that the graphs are empty
+    graphs.clear()
+    
     if n_clicks < 1:
-        return [], loading_state
+        pass
     else:
         start_datetime = pd.to_datetime(start_date)
         end_datetime = pd.to_datetime(end_date)
@@ -183,20 +170,61 @@ def update_graph(
 
         if isinstance(instruments, str):
             instruments = [instruments]
-        if instruments == ["top5"]:
-            instruments = [
-                "australia_assa_62",
-                "glasgow_01",
-                "austria_unigraz_01",
-                "germany_dlr_63",
-                "alaska_anchorage_01",
-            ]  # Replace in future with top 5 instruments with highest signal-to-noise ratio
+        if "all" in instruments:
+            instruments = get_table_names_sql()
 
+        threading.Thread(
+            target=_generate_plots,
+            args=(
+                instruments,
+                start_datetime,
+                end_datetime,
+                timebucket_value,
+                backsub_option,
+                elim_option,
+                color_scale,
+            ),
+        ).start()
+    return dash.no_update
+
+
+@app.callback(
+    Output("graphs-container", "children", allow_duplicate=True),
+    [Input("graph-update-interval", "n_intervals")],
+    [State("graphs-container", "children")],
+    prevent_initial_call=True,
+)
+def update_graph_display(n, current_children):
+    global graphs
+    if current_children is None:
+        current_children = []
+    if graphs is None:
         graphs = []
-        loading_state = True  # initially set loading state to True
-        global dfs
-        dfs = {}
-        for instrument in instruments:
+    if isinstance(current_children, dict):
+        print(current_children.keys())
+    if isinstance(graphs, dict):
+        print(graphs.keys())
+    new_children = current_children + graphs
+
+    # Clear graphs
+    graphs.clear()
+    return new_children
+
+
+def _generate_plots(
+    instruments,
+    start_datetime,
+    end_datetime,
+    timebucket_value,
+    backsub_option,
+    elim_option,
+    color_scale,
+):
+    global graphs
+    global dfs_query
+    dfs_query = {}
+    for instrument in instruments:
+        try:
             query = {
                 "table": instrument,
                 "start_datetime": start_datetime.strftime("%Y-%m-%d %H:%M:%S.%f"),
@@ -204,6 +232,8 @@ def update_graph(
                 "timebucket": f"{timebucket_value}",
                 "agg_function": "MAX",
             }
+            LOGGER.info(f"Query: {query}")
+            # Check if table has data between dates
             if (
                 check_if_table_has_data_between_dates_sql(
                     query["table"], query["start_datetime"], query["end_datetime"]
@@ -219,15 +249,19 @@ def update_graph(
             # Create data
             sql_result = timebucket_values_from_database_sql(**query)
             df = sql_result_to_df(sql_result)
-
+            LOGGER.info(f"DataFrame shape: {df.shape}")
             # Get header information
-            meta_data = return_header_from_newest_spectogram(df, instrument)
+            try:
+                meta_data = return_header_from_newest_spectogram(df, instrument)
+            except Exception as e:
+                LOGGER.error(f"Could not get header information: {e}")
+                meta_data = {}
 
             # Add header information to DataFrame
             for key, value in meta_data.items():
                 df.attrs[key] = value
             # Store unedited data
-            dfs[instrument] = df
+            dfs_query[instrument] = query
             # Create download button with a unique ID
             download_link = html.A(
                 "Download",
@@ -256,6 +290,7 @@ def update_graph(
                 figure=fig,
                 config={
                     "displayModeBar": True,
+                    "staticPlot": False if len(instruments) <= 1 else True,
                     "modeBarButtonsToRemove": [
                         "zoom2d",
                         "pan2d",
@@ -267,42 +302,23 @@ def update_graph(
                     ],
                 },
                 style=fig_style,
-                responsive=True,
+                responsive=True if len(instruments) <= 1 else False,
             )
-            print(f"Setting button ID with instrument: {instrument}")
+            LOGGER.info(f"Setting button ID with instrument: {instrument}")
             graphs.append(html.Div([graph, download_link]))
-        loading_state = False  # set loading state to False after options are loaded
-        return graphs, loading_state
-
-
-# For meta data
-def return_header_from_newest_spectogram(df, instrument_name):
-    """
-    Add the header from the newest spectrogram (based on the datetime inside the df)
-    to the dataframe.
-    """
-    df = df.copy()
-    # Get last day from df
-    last_day = df.index.max().date()
-    # Get glob pattern
-    glob_pattern = instrument_name_to_glob_pattern(instrument_name)
-    # Get paths
-    paths = get_paths(last_day, last_day, glob_pattern)
-    # Get last spectrogram
-    last_spectrogram = get_last_spectrogram_from_paths_list(paths)
-    dict_ = {}
-    # Add metadata
-    for key, value in last_spectrogram.header.items():
-        dict_[key] = value
-
-    del last_spectrogram
-    return dict_
+        except Exception as e:
+            LOGGER.error(f"Error: {e}")
+            continue
 
 
 # This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
 @server.route("/ecallisto_dashboard/download/<instrument>")
 def download(instrument):
-    df = dfs[instrument]  # Get DataFrame
+    query = dfs_query[instrument]  # Get DataFrame
+
+    # Create data
+    sql_result = timebucket_values_from_database_sql(**query)
+    df = sql_result_to_df(sql_result)
 
     # Transpose
     df = df.T

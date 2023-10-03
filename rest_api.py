@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -378,7 +379,7 @@ async def startup_event():
     asyncio.create_task(remove_old_files())
 
 
-### Other helping functions
+# For meta data
 def return_header_from_newest_spectogram(df, instrument_name):
     """
     Add the header from the newest spectrogram (based on the datetime inside the df)
@@ -387,10 +388,12 @@ def return_header_from_newest_spectogram(df, instrument_name):
     df = df.copy()
     # Get last day from df
     last_day = df.index.max().date()
+    start_datetime = pd.to_datetime(last_day) - pd.Timedelta(days=1)
     # Get glob pattern
     glob_pattern = instrument_name_to_glob_pattern(instrument_name)
     # Get paths
-    paths = get_paths(last_day, last_day, glob_pattern)
+    paths = get_paths(start_datetime, last_day, glob_pattern)
+
     # Get last spectrogram
     last_spectrogram = get_last_spectrogram_from_paths_list(paths)
     dict_ = {}
