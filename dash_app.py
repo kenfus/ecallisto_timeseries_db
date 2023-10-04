@@ -2,7 +2,8 @@ import os
 import time as time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-
+from multiprocessing import Queue
+from typing import List
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -60,7 +61,7 @@ navbar = generate_nav_bar()
 
 # Define some constants
 RESOLUTION_WIDTH = 2000
-INTERVAL = 5 * 1000  # 5 seconds
+INTERVAL = 10 * 1000  # in milliseconds
 # Get LOGGER
 LOGGER = app.logger
 
@@ -83,8 +84,13 @@ def generate_options_instrument(list_of_instruments):
 ## Global variables
 options_instrument = generate_options_instrument(get_table_names_sql())
 dfs_query = {}
-graphs = []
-query_meta_data = {"instruments": [], "completed": 0, "status": "idle", "combine_antennas_method": "none"}
+graph_queue = Queue()
+query_meta_data = {
+    "instruments": [],
+    "completed": 0,
+    "status": "idle",
+    "combine_antennas_method": "none",
+}
 
 # Define the layout of the app
 app.layout = html.Div(
@@ -112,28 +118,18 @@ app.layout = html.Div(
             ]
         ),
         dcc.Store(id="progress-store", data={"completed": 0}),
-        dbc.Progress(id="progress-bar", label="0%", value=0, striped=True, animated=True, style={"margin-top": "20px", "margin-bottom": "20px", "display": "none"}),
+        dbc.Progress(
+            id="progress-bar",
+            label="0%",
+            value=0,
+            striped=True,
+            animated=True,
+            style={"margin-top": "20px", "margin-bottom": "20px", "display": "none"},
+        ),
         html.Div(id="graphs-container", children=[]),
+        dcc.Store(id="store-graphs", data=[]),
     ]
 )
-
-
-@app.callback(
-    Output("graphs-container", "children", allow_duplicate=True),
-    [Input("interval-update", "n_intervals")],
-    [State("graphs-container", "children")],
-    prevent_initial_call=True,
-)
-def update_graph_display(n, current_children):
-    if current_children is None:
-        current_children = []
-    if graphs is None or len(graphs) == 0:
-        graphs = []
-    new_children = current_children.copy()
-    while len(graphs) > 0:
-        new_children.append(graphs.pop())
-
-    return new_children
 
 
 @app.callback(
@@ -163,7 +159,7 @@ def update_instrument_dropdown_options(start_datetime, end_datetime):
 
 # This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
 @app.callback(
-    Output("graphs-container", "children", allow_duplicate=True),
+    [Output("graphs-container", "children", allow_duplicate=True), Output("load-data-button", "disabled")],
     [
         Input("load-data-button", "n_clicks"),
     ],
@@ -190,9 +186,6 @@ def start_data_fetching(
     combine_antennas_quantile,
     color_scale,
 ):
-    # Make sure that the graphs are empty
-    graphs.clear()
-
     if n_clicks < 1:
         pass
     else:
@@ -228,7 +221,8 @@ def start_data_fetching(
     return [
         html.Div(
             id="force-re-render", style={"display": "none"}, children=str(uuid.uuid4())
-        )
+        ), # This is a hack to force a re-render of the graphs
+        True,
     ]
 
 
@@ -258,7 +252,7 @@ def _generate_plots(
                 warning_div = html.Div(
                     warning_message, style={"color": "red", "margin-top": "10px"}
                 )
-                graphs.append(warning_div)
+                graph_queue.put(warning_div)
                 continue
             # Update meta data
             query_meta_data["completed"] += 1
@@ -310,6 +304,7 @@ def _generate_plots(
         data_quantile_df = pd.DataFrame(
             torch_quantile, columns=synced_data[1].columns, index=synced_data[1].index
         )
+        LOGGER.info(f"DataFrame shape: {data_quantile_df.shape}")
         LOGGER.info("Plotting combined antennas")
         _create_graph_from_raw_data(
             data_quantile_df,
@@ -318,10 +313,11 @@ def _generate_plots(
             end_datetime,
             color_scale,
             static_plot=False,
-            add_download_button=False,
+            add_download_button=True,
         )
         LOGGER.info("Done plotting combined antennas")
-        query_meta_data["status"] = "done"
+    # Update meta data
+    query_meta_data["status"] = "done"
 
 
 def _fetch_data(
@@ -396,9 +392,37 @@ def _create_graph_from_raw_data(
     else:
         # Create message with download link not available
         download_link = html.Div("Download not available", className="download-button")
-    global graphs
     LOGGER.info(f"Graph created for {instrument}")
-    graphs.append(html.Div([graph, download_link]))
+    graph_queue.put(html.Div([graph, download_link]))
+
+
+# Storing of graphs etc
+@app.callback(Output("store-graphs", "data"),
+              [Input("interval-update", "n_intervals")])
+def update_stored_graphs(n):
+    new_graphs = []
+    while not graph_queue.empty():
+        new_graphs.append(graph_queue.get())
+    if len(new_graphs) > 0:
+        return new_graphs
+    else:
+        dash.no_update
+
+
+@app.callback(
+    Output("graphs-container", "children"),
+    [Input("store-graphs", "data")],
+    [State("graphs-container", "children")],
+)
+def update_graph_display(stored_graphs, current_children):
+    if current_children is None:
+        current_children = []
+    if stored_graphs is None:
+        stored_graphs = []
+    # For some reason, sometimes current_children is a dictionary, so we need to check for that
+    if not isinstance(current_children, List):
+        current_children = [current_children]
+    return current_children + stored_graphs
 
 
 # This is the function for downloading the data
@@ -445,8 +469,14 @@ def update_progress(n, progress_data):
 
 
 @app.callback(
-    [Output("progress-bar", "value"), Output("progress-bar", "label"), Output("progress-bar", "style")],
+    [
+        Output("progress-bar", "value"),
+        Output("progress-bar", "label"),
+        Output("progress-bar", "style"),
+        Output("load-data-button", "disabled", allow_duplicate=True),
+    ],
     [Input("progress-store", "data"), Input("progress-bar", "style")],
+    prevent_initial_call=True,
 )
 def update_progress_bar(data, style):
     total_instruments = len(query_meta_data["instruments"])
@@ -455,26 +485,23 @@ def update_progress_bar(data, style):
         (completed / total_instruments) * 100 if total_instruments > 0 else 0
     )
     percent_complete = round(percent_complete, 0)
-    if query_meta_data["combine_antennas_method"] != "none" and query_meta_data["status"] != "done":
+    if (
+        query_meta_data["combine_antennas_method"] != "none"
+        and query_meta_data["status"] != "done"
+    ):
         percent_complete = min(percent_complete, 99)
     if query_meta_data["status"] == "done":
         percent_complete = 100
         style["display"] = "none"
+        loading_state = False
+    elif query_meta_data["status"] == "idle":
+        style["display"] = "none"
+        loading_state = False
     else:
         style["display"] = "block"
-    return percent_complete, f"{int(percent_complete)}%", style
+        loading_state = True
+    return percent_complete, f"{int(percent_complete)}%", style, loading_state
 
-@app.callback(
-    Output('load-data-button', 'disabled'),
-    Output('load-data-button', 'style'),
-    [Input('progress-store', 'data')]
-)
-def toggle_button_disabled(data):
-    if data['completed'] < len(query_meta_data['instruments']):
-        return True, {'backgroundColor': '#grey'}
-    else:
-        return False, {}
-    
 # Run the app
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=8051, dev_tools_props_check=False)
