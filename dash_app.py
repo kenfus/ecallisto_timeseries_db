@@ -1,18 +1,30 @@
-import threading
+import os
 import time as time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
+import torch
 from astropy.io import fits
 from dash import Input, Output, State, dcc, html
 from dash.dependencies import Input, Output, State
+from dash_bootstrap_components import Progress
+from ecallisto_ng.combine_antennas.combine import (
+    match_spectrograms,
+    preprocess_data,
+    sync_spectrograms,
+)
 from ecallisto_ng.data_processing.utils import (
     elimwrongchannels,
     subtract_constant_background,
     subtract_rolling_background,
 )
-from ecallisto_ng.plotting.plotting import plot_spectogram
+from ecallisto_ng.plotting.plotting import (
+    fill_missing_timesteps_with_nan,
+    plot_spectogram,
+)
 from ecallisto_ng.plotting.utils import fill_missing_timesteps_with_nan
 from flask import Flask, send_file
 
@@ -72,11 +84,12 @@ def generate_options_instrument(list_of_instruments):
 options_instrument = generate_options_instrument(get_table_names_sql())
 dfs_query = {}
 graphs = []
+query_meta_data = {"instruments": [], "completed": 0, "status": "idle", "combine_antennas_method": "none"}
 
 # Define the layout of the app
 app.layout = html.Div(
     [
-        dcc.Interval(id="graph-update-interval", interval=INTERVAL, n_intervals=0),
+        dcc.Interval(id="interval-update", interval=INTERVAL, n_intervals=0),
         navbar,
         dbc.Col(
             dbc.NavbarBrand(
@@ -98,11 +111,29 @@ app.layout = html.Div(
                 generate_load_button(options_instrument),
             ]
         ),
+        dcc.Store(id="progress-store", data={"completed": 0}),
+        dbc.Progress(id="progress-bar", label="0%", value=0, striped=True, animated=True, style={"margin-top": "20px", "margin-bottom": "20px", "display": "none"}),
         html.Div(id="graphs-container", children=[]),
-        html.Div(id="dummy-output", style={"display": "none"}),
-        dcc.Store(id="store-update-state", data={"n": 0}),
     ]
 )
+
+
+@app.callback(
+    Output("graphs-container", "children", allow_duplicate=True),
+    [Input("interval-update", "n_intervals")],
+    [State("graphs-container", "children")],
+    prevent_initial_call=True,
+)
+def update_graph_display(n, current_children):
+    if current_children is None:
+        current_children = []
+    if graphs is None or len(graphs) == 0:
+        graphs = []
+    new_children = current_children.copy()
+    while len(graphs) > 0:
+        new_children.append(graphs.pop())
+
+    return new_children
 
 
 @app.callback(
@@ -132,9 +163,7 @@ def update_instrument_dropdown_options(start_datetime, end_datetime):
 
 # This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
 @app.callback(
-    [
-        Output("dummy-output", "children"),
-    ],
+    Output("graphs-container", "children", allow_duplicate=True),
     [
         Input("load-data-button", "n_clicks"),
     ],
@@ -144,6 +173,8 @@ def update_instrument_dropdown_options(start_datetime, end_datetime):
         State("end-datetime-picker", "value"),
         State("background-sub-dropdown", "value"),
         State("elim-wrong-channels-checklist", "value"),
+        State("combine-antennas-method", "value"),
+        State("combine-antennas-quantile", "value"),
         State("color-scale-dropdown", "value"),
     ],
     prevent_initial_call=True,
@@ -155,11 +186,13 @@ def start_data_fetching(
     end_date,
     backsub_option,
     elim_option,
+    combine_antennas_method,
+    combine_antennas_quantile,
     color_scale,
 ):
     # Make sure that the graphs are empty
     graphs.clear()
-    
+
     if n_clicks < 1:
         pass
     else:
@@ -171,44 +204,32 @@ def start_data_fetching(
         if isinstance(instruments, str):
             instruments = [instruments]
         if "all" in instruments:
-            instruments = get_table_names_sql()
-
-        threading.Thread(
-            target=_generate_plots,
-            args=(
+            instruments = get_table_names_with_data_between_dates_sql(
+                start_datetime, end_datetime
+            )
+        # Update meta data
+        query_meta_data["instruments"] = instruments
+        query_meta_data["completed"] = 0
+        query_meta_data["combine_antennas_method"] = combine_antennas_method
+        query_meta_data["status"] = "running"
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            executor.submit(
+                _generate_plots,
                 instruments,
                 start_datetime,
                 end_datetime,
                 timebucket_value,
                 backsub_option,
                 elim_option,
+                combine_antennas_method,
+                combine_antennas_quantile,
                 color_scale,
-            ),
-        ).start()
-    return dash.no_update
-
-
-@app.callback(
-    Output("graphs-container", "children", allow_duplicate=True),
-    [Input("graph-update-interval", "n_intervals")],
-    [State("graphs-container", "children")],
-    prevent_initial_call=True,
-)
-def update_graph_display(n, current_children):
-    global graphs
-    if current_children is None:
-        current_children = []
-    if graphs is None:
-        graphs = []
-    if isinstance(current_children, dict):
-        print(current_children.keys())
-    if isinstance(graphs, dict):
-        print(graphs.keys())
-    new_children = current_children + graphs
-
-    # Clear graphs
-    graphs.clear()
-    return new_children
+            )
+    return [
+        html.Div(
+            id="force-re-render", style={"display": "none"}, children=str(uuid.uuid4())
+        )
+    ]
 
 
 def _generate_plots(
@@ -218,57 +239,34 @@ def _generate_plots(
     timebucket_value,
     backsub_option,
     elim_option,
+    combine_antennas_method,
+    combine_antennas_quantile,
     color_scale,
 ):
-    global graphs
-    global dfs_query
-    dfs_query = {}
+    dfs = []
+    # Fetch data
     for instrument in instruments:
         try:
-            query = {
-                "table": instrument,
-                "start_datetime": start_datetime.strftime("%Y-%m-%d %H:%M:%S.%f"),
-                "end_datetime": end_datetime.strftime("%Y-%m-%d %H:%M:%S.%f"),
-                "timebucket": f"{timebucket_value}",
-                "agg_function": "MAX",
-            }
-            LOGGER.info(f"Query: {query}")
-            # Check if table has data between dates
-            if (
-                check_if_table_has_data_between_dates_sql(
-                    query["table"], query["start_datetime"], query["end_datetime"]
-                )
-                == False
-            ):
+            df = _fetch_data(
+                instrument,
+                start_datetime,
+                end_datetime,
+                timebucket_value,
+            )
+            if df is None:
                 warning_message = f"No data available for instrument '{instrument}' within the specified time frame."
                 warning_div = html.Div(
                     warning_message, style={"color": "red", "margin-top": "10px"}
                 )
                 graphs.append(warning_div)
                 continue
-            # Create data
-            sql_result = timebucket_values_from_database_sql(**query)
-            df = sql_result_to_df(sql_result)
+            # Update meta data
+            query_meta_data["completed"] += 1
+            # Store unedited data if we want to combine antennas
+            if combine_antennas_method != "none":
+                dfs.append(df)
+                continue
             LOGGER.info(f"DataFrame shape: {df.shape}")
-            # Get header information
-            try:
-                meta_data = return_header_from_newest_spectogram(df, instrument)
-            except Exception as e:
-                LOGGER.error(f"Could not get header information: {e}")
-                meta_data = {}
-
-            # Add header information to DataFrame
-            for key, value in meta_data.items():
-                df.attrs[key] = value
-            # Store unedited data
-            dfs_query[instrument] = query
-            # Create download button with a unique ID
-            download_link = html.A(
-                "Download",
-                id={"type": "download", "index": instrument},
-                className="download-button",  # Optional, for styling like a button
-                href=f"/ecallisto_dashboard/download/{instrument}",
-            )
 
             # Sync time axis between plots
             df = fill_missing_timesteps_with_nan(df)
@@ -281,37 +279,129 @@ def _generate_plots(
                 df = subtract_rolling_background(df, window=10)
             # Plotting
             df = fill_missing_timesteps_with_nan(df, start_datetime, end_datetime)
-            fig = plot_spectogram(
-                df, instrument, start_datetime, end_datetime, color_scale=color_scale
+            _create_graph_from_raw_data(
+                df,
+                instrument,
+                start_datetime,
+                end_datetime,
+                color_scale,
+                static_plot=True if len(instruments) > 1 else False,
+                add_download_button=True,
             )
-            fig_style = {"display": "block"} if fig else {"display": "none"}
-            graph = dcc.Graph(
-                id={"type": "live-graph", "index": instrument},
-                figure=fig,
-                config={
-                    "displayModeBar": True,
-                    "staticPlot": False if len(instruments) <= 1 else True,
-                    "modeBarButtonsToRemove": [
-                        "zoom2d",
-                        "pan2d",
-                        "zoomIn2d",
-                        "zoomOut2d",
-                        "autoScale2d",
-                        "hoverClosestCartesian",
-                        "hoverCompareCartesian",
-                    ],
-                },
-                style=fig_style,
-                responsive=True if len(instruments) <= 1 else False,
-            )
-            LOGGER.info(f"Setting button ID with instrument: {instrument}")
-            graphs.append(html.Div([graph, download_link]))
+
         except Exception as e:
             LOGGER.error(f"Error: {e}")
             continue
+    # Combine antennas
+    if combine_antennas_method != "none":
+        # Preprocess data
+        dfs = preprocess_data(dfs)
+        # Match data, in time and frequency
+        matched_data = match_spectrograms(dfs)
+        # Sync data in time (e.g. if some clocks of antennas are not synced). This only works if the data does not have any nans.
+        synced_data, _ = sync_spectrograms(matched_data)
+        # To torch, for fast processingtorch_shifted = torch.stack([torch.from_numpy(df.values) for df in synced_data])
+        ## Calcualte quantile
+        torch_synced = torch.stack([torch.from_numpy(df.values) for df in synced_data])
+        torch_quantile = torch.nanquantile(
+            torch_synced, combine_antennas_quantile, dim=0
+        )
+        # Plotting
+        data_quantile_df = pd.DataFrame(
+            torch_quantile, columns=synced_data[1].columns, index=synced_data[1].index
+        )
+        LOGGER.info("Plotting combined antennas")
+        _create_graph_from_raw_data(
+            data_quantile_df,
+            "E-Callisto Virtual Antenna",
+            start_datetime,
+            end_datetime,
+            color_scale,
+            static_plot=False,
+            add_download_button=False,
+        )
+        LOGGER.info("Done plotting combined antennas")
+        query_meta_data["status"] = "done"
 
 
-# This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
+def _fetch_data(
+    instrument,
+    start_datetime,
+    end_datetime,
+    timebucket_value,
+):
+    q = {
+        "table": instrument,
+        "start_datetime": start_datetime.strftime("%Y-%m-%d %H:%M:%S.%f"),
+        "end_datetime": end_datetime.strftime("%Y-%m-%d %H:%M:%S.%f"),
+        "timebucket": f"{timebucket_value}",
+        "agg_function": "MAX",
+    }
+    LOGGER.info(f"Query: {q}")
+    dfs_query[instrument] = q
+    # Check if table has data between dates
+    if (
+        check_if_table_has_data_between_dates_sql(
+            q["table"], q["start_datetime"], q["end_datetime"]
+        )
+        == False
+    ):
+        return None
+    # Create data
+    sql_result = timebucket_values_from_database_sql(**q)
+    df = sql_result_to_df(sql_result)
+    return df
+
+
+def _create_graph_from_raw_data(
+    df,
+    instrument,
+    start_datetime,
+    end_datetime,
+    color_scale,
+    static_plot=False,
+    add_download_button=True,
+):
+    fig = plot_spectogram(
+        df, instrument, start_datetime, end_datetime, color_scale=color_scale
+    )
+    fig_style = {"display": "block"} if fig else {"display": "none"}
+    graph = dcc.Graph(
+        id={"type": "live-graph", "index": instrument},
+        figure=fig,
+        config={
+            "displayModeBar": True,
+            "staticPlot": static_plot,
+            "modeBarButtonsToRemove": [
+                "zoom2d",
+                "pan2d",
+                "zoomIn2d",
+                "zoomOut2d",
+                "autoScale2d",
+                "hoverClosestCartesian",
+                "hoverCompareCartesian",
+            ],
+        },
+        style=fig_style,
+        responsive=not static_plot,
+    )
+    if add_download_button:
+        # Create download button with a unique ID
+        download_link = html.A(
+            "Download",
+            id={"type": "download", "index": instrument},
+            className="download-button",  # Optional, for styling like a button
+            href=f"/ecallisto_dashboard/download/{instrument}",
+        )
+    else:
+        # Create message with download link not available
+        download_link = html.Div("Download not available", className="download-button")
+    global graphs
+    LOGGER.info(f"Graph created for {instrument}")
+    graphs.append(html.Div([graph, download_link]))
+
+
+# This is the function for downloading the data
 @server.route("/ecallisto_dashboard/download/<instrument>")
 def download(instrument):
     query = dfs_query[instrument]  # Get DataFrame
@@ -326,9 +416,11 @@ def download(instrument):
     # Convert DataFrame to 2D NumPy array (assumes df is already 2D)
     data_array = df.to_numpy()
 
+    header = return_header_from_newest_spectogram(df, instrument)
+
     # Create header
     header = fits.Header()
-    for key, value in df.attrs.items():
+    for key, value in header.items():
         header[key] = value
 
     # Create ImageHDU
@@ -341,6 +433,48 @@ def download(instrument):
     return send_file(file_path, as_attachment=True, download_name=f"{instrument}.fits")
 
 
+# Boring and wayy to complex prograss bar stuff. That has to be simpler, no?
+@app.callback(
+    Output("progress-store", "data"),
+    Input("interval-update", "n_intervals"),
+    State("progress-store", "data"),
+)
+def update_progress(n, progress_data):
+    progress_data["completed"] = len(dfs_query)
+    return progress_data
+
+
+@app.callback(
+    [Output("progress-bar", "value"), Output("progress-bar", "label"), Output("progress-bar", "style")],
+    [Input("progress-store", "data"), Input("progress-bar", "style")],
+)
+def update_progress_bar(data, style):
+    total_instruments = len(query_meta_data["instruments"])
+    completed = query_meta_data["completed"]
+    percent_complete = (
+        (completed / total_instruments) * 100 if total_instruments > 0 else 0
+    )
+    percent_complete = round(percent_complete, 0)
+    if query_meta_data["combine_antennas_method"] != "none" and query_meta_data["status"] != "done":
+        percent_complete = min(percent_complete, 99)
+    if query_meta_data["status"] == "done":
+        percent_complete = 100
+        style["display"] = "none"
+    else:
+        style["display"] = "block"
+    return percent_complete, f"{int(percent_complete)}%", style
+
+@app.callback(
+    Output('load-data-button', 'disabled'),
+    Output('load-data-button', 'style'),
+    [Input('progress-store', 'data')]
+)
+def toggle_button_disabled(data):
+    if data['completed'] < len(query_meta_data['instruments']):
+        return True, {'backgroundColor': '#grey'}
+    else:
+        return False, {}
+    
 # Run the app
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=8051, dev_tools_props_check=False)

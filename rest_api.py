@@ -380,7 +380,7 @@ async def startup_event():
 
 
 # For meta data
-def return_header_from_newest_spectogram(df, instrument_name):
+def return_header_from_newest_spectogram(df, instrument_name) -> dict:
     """
     Add the header from the newest spectrogram (based on the datetime inside the df)
     to the dataframe.

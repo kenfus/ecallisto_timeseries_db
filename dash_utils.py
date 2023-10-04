@@ -1,89 +1,9 @@
 from datetime import datetime, timedelta
 
 import dash_bootstrap_components as dbc
+import dash_daq as daq
 import plotly.express as px
 from dash import dcc, html
-
-
-def generate_nav_bar():
-    return dbc.Navbar(
-        dbc.Container(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            html.Img(
-                                src="./assets/logo_ecallisto_website.png", height="50px"
-                            ),
-                            className="p-0",
-                        ),
-                        dbc.Col(
-                            dbc.Nav(
-                                [
-                                    dbc.DropdownMenu(
-                                        nav=True,
-                                        in_navbar=True,
-                                        label="Help",
-                                        children=[
-                                            dbc.DropdownMenuItem("Option 1", href="#"),
-                                            dbc.DropdownMenuItem("Option 2", href="#"),
-                                            dbc.DropdownMenuItem("Option 3", href="#"),
-                                        ],
-                                    ),
-                                    dbc.DropdownMenu(
-                                        nav=True,
-                                        in_navbar=True,
-                                        label="Similar products",
-                                        children=[
-                                            dbc.DropdownMenuItem("Option 1", href="#"),
-                                            dbc.DropdownMenuItem("Option 2", href="#"),
-                                            dbc.DropdownMenuItem("Option 3", href="#"),
-                                        ],
-                                    ),
-                                    dbc.DropdownMenu(
-                                        nav=True,
-                                        in_navbar=True,
-                                        label="Related products",
-                                        children=[
-                                            dbc.DropdownMenuItem("Option 1", href="#"),
-                                            dbc.DropdownMenuItem("Option 2", href="#"),
-                                            dbc.DropdownMenuItem("Option 3", href="#"),
-                                        ],
-                                    ),
-                                    dbc.DropdownMenu(
-                                        nav=True,
-                                        in_navbar=True,
-                                        label="Latest",
-                                        children=[
-                                            dbc.DropdownMenuItem("Option 1", href="#"),
-                                            dbc.DropdownMenuItem("Option 2", href="#"),
-                                            dbc.DropdownMenuItem("Option 3", href="#"),
-                                        ],
-                                    ),
-                                    dbc.DropdownMenu(
-                                        nav=True,
-                                        in_navbar=True,
-                                        label="Query",
-                                        children=[
-                                            dbc.DropdownMenuItem("Option 1", href="#"),
-                                            dbc.DropdownMenuItem("Option 2", href="#"),
-                                            dbc.DropdownMenuItem("Option 3", href="#"),
-                                        ],
-                                    ),
-                                ],
-                                className="ml-auto",
-                            ),
-                        ),
-                    ],
-                    align="center",
-                    className="g-0",  # equivalent to no_gutters
-                ),
-            ]
-        ),
-        color="dark",
-        dark=True,
-        className="mb-5",
-    )
 
 
 def generate_datetime_picker():
@@ -92,15 +12,14 @@ def generate_datetime_picker():
             dcc.Input(
                 id="start-datetime-picker",
                 type="datetime-local",
-                value=datetime.now()
-                .replace(hour=0, minute=0, second=0, microsecond=0)
-                .strftime("%Y-%m-%dT%H:%M"),
+                value=(datetime.now() - timedelta(days=1)).replace(
+                    minute=0, second=0, microsecond=0
+                ),
             ),
             dcc.Input(
                 id="end-datetime-picker",
                 type="datetime-local",
-                value=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                + timedelta(days=1),
+                value=datetime.now().replace(minute=0, second=0, microsecond=0),
             ),
         ],
         style={"width": "100%", "display": "block", "margin-top": "60px"},
@@ -137,7 +56,7 @@ def generate_plotting_options():
                                 ),
                             ]
                         ),
-                        width={"size": 4, "offset": 0},
+                        width={"size": 3, "offset": 0},
                     ),
                     dbc.Col(
                         html.Div(
@@ -155,7 +74,51 @@ def generate_plotting_options():
                                 ),
                             ]
                         ),
-                        width={"size": 4, "offset": 0},
+                        width={"size": 3, "offset": 0},
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.H5(
+                                    "Virtual Antenna by combining antennas"
+                                ),  # Title
+                                html.P(
+                                    [
+                                        "When fetching more than one antenna, you can combine them to a virtual antenna. To know how this happens, please have a",
+                                        html.A(
+                                            " look at this notebook and it's functions.",
+                                            href="https://github.com/i4Ds/ecallisto_ng/blob/main/example/combination_of_signals_quantile_crosscorrelation.ipynb",
+                                        ),
+                                    ],
+                                ),
+                                html.H6("Method for combination:"),
+                                dcc.Dropdown(
+                                    id="combine-antennas-method",
+                                    options=[
+                                        {
+                                            "label": "Don't combine",
+                                            "value": "none",
+                                        },
+                                        {
+                                            "label": "Quantile",
+                                            "value": "quantile",
+                                        },
+                                    ],
+                                    value="none",  # default value
+                                    multi=False,
+                                ),
+                                # Slider for quantile value
+                                html.H6("Quantile value:"),  # Title
+                                dcc.Slider(
+                                    id="combine-antennas-quantile",
+                                    min=0,
+                                    max=1,
+                                    step=0.1,
+                                    value=0.4,
+                                ),
+                            ]
+                        ),
+                        width={"size": 3, "offset": 0},
                     ),
                     dbc.Col(
                         html.Div(
@@ -165,7 +128,7 @@ def generate_plotting_options():
                                 dcc.Dropdown(
                                     id="color-scale-dropdown",
                                     options=px.colors.named_colorscales(),
-                                    value="haline",  # default value
+                                    value="inferno",  # default value
                                     multi=False,
                                 ),
                                 html.A(
@@ -175,7 +138,7 @@ def generate_plotting_options():
                                 ),
                             ]
                         ),
-                        width={"size": 4, "offset": 0},
+                        width={"size": 3, "offset": 0},
                     ),
                 ],
                 className="mb-4",
@@ -281,7 +244,7 @@ def generate_load_button(options_instrument):
                             dcc.Dropdown(
                                 id="instrument-dropdown",
                                 options=options_instrument,
-                                value="top5",
+                                value="all",
                                 multi=True,
                             ),
                         ],
@@ -292,4 +255,85 @@ def generate_load_button(options_instrument):
             ),
         ],
         style={"display": "block"},  # Initially, the container is visible
+    )
+
+
+def generate_nav_bar():
+    return dbc.Navbar(
+        dbc.Container(
+            [
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            html.Img(
+                                src="./assets/logo_ecallisto_website.png", height="50px"
+                            ),
+                            className="p-0",
+                        ),
+                        dbc.Col(
+                            dbc.Nav(
+                                [
+                                    dbc.DropdownMenu(
+                                        nav=True,
+                                        in_navbar=True,
+                                        label="Help",
+                                        children=[
+                                            dbc.DropdownMenuItem("Option 1", href="#"),
+                                            dbc.DropdownMenuItem("Option 2", href="#"),
+                                            dbc.DropdownMenuItem("Option 3", href="#"),
+                                        ],
+                                    ),
+                                    dbc.DropdownMenu(
+                                        nav=True,
+                                        in_navbar=True,
+                                        label="Similar products",
+                                        children=[
+                                            dbc.DropdownMenuItem("Option 1", href="#"),
+                                            dbc.DropdownMenuItem("Option 2", href="#"),
+                                            dbc.DropdownMenuItem("Option 3", href="#"),
+                                        ],
+                                    ),
+                                    dbc.DropdownMenu(
+                                        nav=True,
+                                        in_navbar=True,
+                                        label="Related products",
+                                        children=[
+                                            dbc.DropdownMenuItem("Option 1", href="#"),
+                                            dbc.DropdownMenuItem("Option 2", href="#"),
+                                            dbc.DropdownMenuItem("Option 3", href="#"),
+                                        ],
+                                    ),
+                                    dbc.DropdownMenu(
+                                        nav=True,
+                                        in_navbar=True,
+                                        label="Latest",
+                                        children=[
+                                            dbc.DropdownMenuItem("Option 1", href="#"),
+                                            dbc.DropdownMenuItem("Option 2", href="#"),
+                                            dbc.DropdownMenuItem("Option 3", href="#"),
+                                        ],
+                                    ),
+                                    dbc.DropdownMenu(
+                                        nav=True,
+                                        in_navbar=True,
+                                        label="Query",
+                                        children=[
+                                            dbc.DropdownMenuItem("Option 1", href="#"),
+                                            dbc.DropdownMenuItem("Option 2", href="#"),
+                                            dbc.DropdownMenuItem("Option 3", href="#"),
+                                        ],
+                                    ),
+                                ],
+                                className="ml-auto",
+                            ),
+                        ),
+                    ],
+                    align="center",
+                    className="g-0",  # equivalent to no_gutters
+                ),
+            ]
+        ),
+        color="dark",
+        dark=True,
+        className="mb-5",
     )
