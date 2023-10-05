@@ -4,6 +4,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Queue
 from typing import List
+
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -11,12 +12,12 @@ import torch
 from astropy.io import fits
 from dash import Input, Output, State, dcc, html
 from dash.dependencies import Input, Output, State
-from dash_bootstrap_components import Progress
 from ecallisto_ng.combine_antennas.combine import (
     match_spectrograms,
     preprocess_data,
     sync_spectrograms,
 )
+from ecallisto_ng.combine_antennas.utils import round_col_to_nearest_bin
 from ecallisto_ng.data_processing.utils import (
     elimwrongchannels,
     subtract_constant_background,
@@ -61,7 +62,7 @@ navbar = generate_nav_bar()
 
 # Define some constants
 RESOLUTION_WIDTH = 2000
-INTERVAL = 10 * 1000  # in milliseconds
+INTERVAL = 1 * 1000  # in milliseconds
 # Get LOGGER
 LOGGER = app.logger
 
@@ -95,7 +96,7 @@ query_meta_data = {
 # Define the layout of the app
 app.layout = html.Div(
     [
-        dcc.Interval(id="interval-update", interval=INTERVAL, n_intervals=0),
+        dcc.Interval(id="interval-update", interval=INTERVAL, max_intervals=0),
         navbar,
         dbc.Col(
             dbc.NavbarBrand(
@@ -159,7 +160,11 @@ def update_instrument_dropdown_options(start_datetime, end_datetime):
 
 # This is the callback function that updates the graphs whenever the date range or instrument is changed by the user.
 @app.callback(
-    [Output("graphs-container", "children", allow_duplicate=True), Output("load-data-button", "disabled")],
+    [
+        Output("graphs-container", "children", allow_duplicate=True),
+        Output("load-data-button", "disabled"),
+        Output('interval-update', 'max_intervals', allow_duplicate=True),
+    ],
     [
         Input("load-data-button", "n_clicks"),
     ],
@@ -187,7 +192,7 @@ def start_data_fetching(
     color_scale,
 ):
     if n_clicks < 1:
-        pass
+        return dash.no_update, dash.no_update, dash.no_update
     else:
         start_datetime = pd.to_datetime(start_date)
         end_datetime = pd.to_datetime(end_date)
@@ -204,26 +209,29 @@ def start_data_fetching(
         query_meta_data["instruments"] = instruments
         query_meta_data["completed"] = 0
         query_meta_data["combine_antennas_method"] = combine_antennas_method
-        query_meta_data["status"] = "running"
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            executor.submit(
-                _generate_plots,
-                instruments,
-                start_datetime,
-                end_datetime,
-                timebucket_value,
-                backsub_option,
-                elim_option,
-                combine_antennas_method,
-                combine_antennas_quantile,
-                color_scale,
-            )
-    return [
-        html.Div(
-            id="force-re-render", style={"display": "none"}, children=str(uuid.uuid4())
-        ), # This is a hack to force a re-render of the graphs
-        True,
-    ]
+        query_meta_data["status"] = "processing"
+        executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+        executor.submit(
+            _generate_plots,
+            instruments,
+            start_datetime,
+            end_datetime,
+            timebucket_value,
+            backsub_option,
+            elim_option,
+            combine_antennas_method,
+            combine_antennas_quantile,
+            color_scale,
+        )
+        print("Done")
+        print("Returning max_intervals now")
+        return [
+            html.Div(
+                id="force-re-render", style={"display": "none"}, children=str(uuid.uuid4())
+            ),  # This is a hack to force a re-render of the graphs
+            True,
+            -1
+        ]
 
 
 def _generate_plots(
@@ -258,6 +266,7 @@ def _generate_plots(
             query_meta_data["completed"] += 1
             # Store unedited data if we want to combine antennas
             if combine_antennas_method != "none":
+                df = round_col_to_nearest_bin(df, 0.2)
                 dfs.append(df)
                 continue
             LOGGER.info(f"DataFrame shape: {df.shape}")
@@ -367,7 +376,7 @@ def _create_graph_from_raw_data(
         figure=fig,
         config={
             "displayModeBar": True,
-            "staticPlot": static_plot,
+            "staticPlot": True,
             "modeBarButtonsToRemove": [
                 "zoom2d",
                 "pan2d",
@@ -379,7 +388,7 @@ def _create_graph_from_raw_data(
             ],
         },
         style=fig_style,
-        responsive=not static_plot,
+        responsive=True,
     )
     if add_download_button:
         # Create download button with a unique ID
@@ -397,8 +406,7 @@ def _create_graph_from_raw_data(
 
 
 # Storing of graphs etc
-@app.callback(Output("store-graphs", "data"),
-              [Input("interval-update", "n_intervals")])
+@app.callback(Output("store-graphs", "data"), [Input("interval-update", "n_intervals")])
 def update_stored_graphs(n):
     new_graphs = []
     while not graph_queue.empty():
@@ -474,11 +482,12 @@ def update_progress(n, progress_data):
         Output("progress-bar", "label"),
         Output("progress-bar", "style"),
         Output("load-data-button", "disabled", allow_duplicate=True),
+        Output("interval-update", "max_intervals", allow_duplicate=True),
     ],
-    [Input("progress-store", "data"), Input("progress-bar", "style")],
+    [Input("progress-store", "data"), Input("progress-bar", "style"), Input("interval-update", "max_intervals")],
     prevent_initial_call=True,
 )
-def update_progress_bar(data, style):
+def update_progress_bar(data, style, max_intervals):
     total_instruments = len(query_meta_data["instruments"])
     completed = query_meta_data["completed"]
     percent_complete = (
@@ -490,17 +499,28 @@ def update_progress_bar(data, style):
         and query_meta_data["status"] != "done"
     ):
         percent_complete = min(percent_complete, 99)
+    # Max interval
     if query_meta_data["status"] == "done":
         percent_complete = 100
         style["display"] = "none"
         loading_state = False
+        max_intervals = 0
     elif query_meta_data["status"] == "idle":
+        percent_complete = 0
         style["display"] = "none"
         loading_state = False
-    else:
+        # Don't change max_intervals
+        max_intervals = max_intervals
+    elif query_meta_data["status"] == "processing":
         style["display"] = "block"
         loading_state = True
-    return percent_complete, f"{int(percent_complete)}%", style, loading_state
+        max_intervals = -1
+    else:
+        print("Unknown status")
+    print(query_meta_data)
+    print(max_intervals)
+    return percent_complete, f"{int(percent_complete)}%", style, loading_state, max_intervals
+
 
 # Run the app
 if __name__ == "__main__":

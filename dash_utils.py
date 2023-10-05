@@ -84,9 +84,9 @@ def generate_plotting_options():
                                 ),  # Title
                                 html.P(
                                     [
-                                        "When fetching more than one antenna, you can combine them to a virtual antenna. To know how this happens, please have a",
+                                        "When fetching more than one antenna, you can combine them to a virtual antenna. To know how this don, please have a",
                                         html.A(
-                                            " look at this notebook and it's functions.",
+                                            " look at this notebook.",
                                             href="https://github.com/i4Ds/ecallisto_ng/blob/main/example/combination_of_signals_quantile_crosscorrelation.ipynb",
                                         ),
                                     ],
@@ -111,10 +111,10 @@ def generate_plotting_options():
                                 html.H6("Quantile value:"),  # Title
                                 dcc.Slider(
                                     id="combine-antennas-quantile",
-                                    min=0,
-                                    max=1,
+                                    min=0.1,
+                                    max=0.9,
                                     step=0.1,
-                                    value=0.4,
+                                    value=0.5,
                                 ),
                             ]
                         ),
