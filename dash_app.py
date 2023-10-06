@@ -62,13 +62,12 @@ navbar = generate_nav_bar()
 
 # Define some constants
 RESOLUTION_WIDTH = 2000
-INTERVAL = 1 * 1000  # in milliseconds
+INTERVAL = 10 * 1000  # in milliseconds
 # Get LOGGER
 LOGGER = app.logger
 
 # for gunicorn
 server = app.server
-
 
 # Generate some constants
 def generate_options_instrument(list_of_instruments):
@@ -376,7 +375,7 @@ def _create_graph_from_raw_data(
         figure=fig,
         config={
             "displayModeBar": True,
-            "staticPlot": True,
+            "staticPlot": static_plot,
             "modeBarButtonsToRemove": [
                 "zoom2d",
                 "pan2d",
@@ -388,7 +387,7 @@ def _create_graph_from_raw_data(
             ],
         },
         style=fig_style,
-        responsive=True,
+        responsive=not static_plot,
     )
     if add_download_button:
         # Create download button with a unique ID
@@ -524,4 +523,4 @@ def update_progress_bar(data, style, max_intervals):
 
 # Run the app
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=8051, dev_tools_props_check=False)
+    app.run(host="127.0.0.1", port=8051, dev_tools_props_check=False)
