@@ -17,13 +17,13 @@ from logging_utils import GLOBAL_LOGGER as LOGGER
 
 # Create variables for the connection to the OS
 os.environ["PGHOST"] = "localhost"
-# If no user is set, set it to postgres because that is the default user and it's hopefully not production
+# If no user is set, set it to postgres because that is the default user
 if "PGUSER" not in os.environ:
     os.environ["PGUSER"] = "ecallisto_read_only"
-# If no password is set, set it to 1234 because that is the default password and it's hopefully not production
+# If no password is set, set it to the read only password.
 if "PGPASSWORD" not in os.environ:
-    os.environ["PGPASSWORD"] = "1234"
-# If no database is set, set it to tsdb because that is the default database and it's hopefully not production
+    os.environ["PGPASSWORD"] = "VgQ3AbFQ4yGVDC"
+# If no database is set, set it to tsdb because that is the default database
 if "PGDATABASE" not in os.environ:
     os.environ["PGDATABASE"] = "ecallisto_tsdb"
 
