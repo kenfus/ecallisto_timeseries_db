@@ -345,6 +345,7 @@ def add_instrument_from_path_to_database(path):
         LOGGER.info(
             f"Skipping {os.path.basename(path)} because it is in the black list"
         )
+        drop_table_sql(instrument)
         return
     LOGGER.info(f"Adding instrument {instrument} to database")
     if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
