@@ -20,6 +20,7 @@ from database_functions import (
     get_table_names_sql,
     insert_values_sql,
     table_to_hyper_table,
+    drop_table_sql
 )
 from logging_utils import GLOBAL_LOGGER as LOGGER
 from logging_utils import HiddenPrints
@@ -254,6 +255,7 @@ def add_spec_from_path_to_database(
             LOGGER.info(
                 f"Skipping {os.path.basename(path)} because it is in the black list"
             )
+            drop_table_sql(instrument)
             return
 
         if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
@@ -339,6 +341,11 @@ def add_instrument_from_path_to_database(path):
         spec = CallistoSpectrogram.read(path, cache=False)
     spec = masked_spectogram_to_array(spec)
     instrument = extract_instrument_name(path)
+    if instrument in BLACK_LIST:
+        LOGGER.info(
+            f"Skipping {os.path.basename(path)} because it is in the black list"
+        )
+        return
     LOGGER.info(f"Adding instrument {instrument} to database")
     if not np.unique(spec.freq_axis).size == len(spec.freq_axis):
         LOGGER.warning(f"{os.path.basename(path)} has non-unique frequency axis")
