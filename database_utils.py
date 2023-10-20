@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from radiospectra.sources import CallistoSpectrogram
 from tqdm import tqdm
-
+import psycopg2
 from database_functions import (
     add_new_column_sql,
     create_table_datetime_primary_key_sql,
@@ -312,10 +312,22 @@ def add_spec_from_path_to_database(
                 date_range[-1].strftime("%Y-%m-%d %H:%M:%S.%f"),
             )
         insert_values_sql(instrument, sql_columns, sql_values)
+    except psycopg2.errors.TooManyColumns:
+        # Add the instrument to the blacklist
+        BLACK_LIST.append(instrument)
+        # Save the blacklist as txt
+        with open("blacklist.txt", "w") as f:
+            f.write("BLACK_LIST = [\n")
+            f.write(",\n".join([f'"{instrument}"' for instrument in BLACK_LIST]))
+            f.write("\n]")
+        LOGGER.info(
+            f"Skipping instrument {instrument} from now on because it has too many columns (>1600)"
+        )
+
     except Exception as e:
         tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
         tb_str = "".join(tb_str)
-        LOGGER.error(f"Error adding data for {path}: {e}\nTraceback:\n{tb_str}")
+        LOGGER.error(f"Error adding data for file {path} and instrument {instrument}: {e}\nTraceback:\n{tb_str}")
 
 
 def add_instrument_from_path_to_database(path):
