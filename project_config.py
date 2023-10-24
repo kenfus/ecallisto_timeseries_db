@@ -15,5 +15,6 @@ BLACK_LIST = [
 "germany_dlr_63",
 "swiss_irsol_01",
 "germany_dlr_62swiss_heiterswil_59",
-"india_udaipur_02"
+"india_udaipur_02",
+"swiss_muhen_02"
 ]
