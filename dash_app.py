@@ -441,13 +441,13 @@ def download(instrument):
     sql_result = timebucket_values_from_database_sql(**query)
     df = sql_result_to_df(sql_result)
 
+    header = return_header_from_newest_spectogram(df, instrument)
+
     # Transpose
     df = df.T
-
+    
     # Convert DataFrame to 2D NumPy array (assumes df is already 2D)
     data_array = df.to_numpy()
-
-    header = return_header_from_newest_spectogram(df, instrument)
 
     # Create header
     header = fits.Header()

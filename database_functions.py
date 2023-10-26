@@ -324,18 +324,20 @@ def check_if_table_has_data_between_dates_sql(
 ):
     with psycopg2.connect(CONNECTION) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"""
-            SELECT EXISTS (
-                SELECT 1
+        try:
+            cursor.execute(
+                f"""
+                SELECT 1/0
                 FROM {table_name}
-                WHERE {datetime_col} BETWEEN '{start_date}' AND '{end_date}'
-                LIMIT 1
-            );
-            """
-        )
-        has_data = cursor.fetchone()[0]
-        return has_data
+                WHERE {datetime_col} BETWEEN %s AND %s
+                LIMIT 1;
+                """,
+                (start_date, end_date)
+            )
+        except psycopg2.DatabaseError:
+            return True
+        return False
+
 
 
 def add_new_column_default_value_sql(
