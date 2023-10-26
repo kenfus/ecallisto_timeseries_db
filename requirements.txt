@@ -1,4 +1,4 @@
-radiospectra @ git+https://github.com/i4Ds/radiospectra_old.git@8bfee2e824d6a7d136445e066fb1a676a8a1f496
+radiospectra
 pandas
 numpy
 psycopg2
@@ -12,5 +12,6 @@ fastapi
 uvicorn
 schedule
 watchdog
+pytimeparse
 # conda install -c pyviz holoviews
 # conda install -c plotly plotly=5.13.0

@@ -1,6 +1,5 @@
 # Timescale DB for e-callisto data
-This Repository contains Python code provides a connection to a TimescaleDB, a time-series database built on top of PostgreSQL. It allows users to store and analyze time-series data in a scalable and efficient manner. The code utilizes the psycopg2 library to establish a connection between the Python script and the TimescaleDB database.
-
+This Repository contains Python code provides a connection to a TimescaleDB, a time-series database built on top of PostgreSQL. It allows users to store and analyze time-series data in a scalable and efficient manner. The code utilizes the psycopg2 library to establish a connection between the Python script and the TimescaleDB database. The imports are done with a user called `tsdb_data_additio`, which has very few rights.
 
 ## Timescale DB
 The database is a timeseries database, where each row is a timestamp and each column is a frequency. For each instrument, a table is created with the name of the instrument. How the data is inserted and how the table is created can be found in the file `database_functions.py`.
