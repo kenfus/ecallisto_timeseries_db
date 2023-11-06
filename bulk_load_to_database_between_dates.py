@@ -17,7 +17,7 @@ from database_utils import (
     create_dict_of_instrument_paths,
 )
 from logging_utils import GLOBAL_LOGGER as LOGGER
-
+from project_config import BLACK_LIST
 
 def add_instruments_from_paths_to_database(dict_paths):
     """
@@ -30,6 +30,8 @@ def add_instruments_from_paths_to_database(dict_paths):
     # Add the instruments to the database
     for instrument in dict_paths.keys():
         if instrument not in get_table_names_sql():
+            if instrument in BLACK_LIST:
+                continue
             for path in dict_paths[instrument]:
                 # Try to add the instrument to the database
                 # Sometimes it fails because the file is corrupted. In that case, try the next file and break if it works

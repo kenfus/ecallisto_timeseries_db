@@ -12,10 +12,12 @@ BLACK_LIST = [
 "egypt_alexandria_02",
 "germany_dlr_63",
 "swiss_irsol_01",
-"germany_dlr_62swiss_heiterswil_59",
-"india_udaipur_02",
+"germany_dlr_62",
+"swiss_heiterswil_59",
 "swiss_muhen_02",
 "austria_oe3flb_55",
 "triest_57",
-"unam_59"
+"unam_59",
+"usa_arizona_erau_58",
+"australia_assa_01"
 ]
